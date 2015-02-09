@@ -22,6 +22,7 @@ def write_metadata_link_list(name):
             # geoserver supports only three mime
             if md_type not in ['ISO19115:2003', 'FGDC', 'TC211']:
                 mime = 'other'
+                md_type = 'other'
             builder.start("metadataLink", dict())
             builder.start("type", dict())
             builder.data(mime)
