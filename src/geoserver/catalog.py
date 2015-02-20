@@ -65,28 +65,46 @@ class Catalog(object):
         self.service_url = service_url
         if self.service_url.endswith("/"):
             self.service_url = self.service_url.strip("/")
-        self.http = httplib2.Http(
-            disable_ssl_certificate_validation=disable_ssl_certificate_validation)
         self.username = username
         self.password = password
-        self.http.add_credentials(self.username, self.password)
-        netloc = urlparse(service_url).netloc
-        self.http.authorizations.append(
-                httplib2.BasicAuthentication(
-                        (username, password),
-                        netloc,
-                        service_url,
-                        {},
-                        None,
-                        None,
-                        self.http
-                        ))
+        self.diable_ssl_cert_validation = disable_ssl_certificate_validation
+        self.http = None
+        self.setup_connection()
+
         self._cache = dict()
         self._version = None
+
+    def __getstate__(self):
+        '''http connection cannot be pickled'''
+        state = dict(vars(self))
+        state.pop('http', None)
+        state['http'] = None
+        return state
+
+    def __setstate__(self, state):
+        '''restore http connection upon unpickling'''
+        self.__dict__.update(state)
+        self.setup_connection()
 
     @property
     def gs_base_url(self):
         return self.service_url.rstrip("rest")
+
+    def setup_connection(self):
+        self.http = httplib2.Http(
+            disable_ssl_certificate_validation=self.diable_ssl_cert_validation)
+        self.http.add_credentials(self.username, self.password)
+        netloc = urlparse(self.service_url).netloc
+        self.http.authorizations.append(
+            httplib2.BasicAuthentication(
+                (self.username, self.password),
+                netloc,
+                self.service_url,
+                {},
+                None,
+                None,
+                self.http
+            ))
 
     def about(self):
         '''return the about information as a formatted html'''
