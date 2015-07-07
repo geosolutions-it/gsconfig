@@ -460,8 +460,8 @@ class ModifyingTests(unittest.TestCase):
         bogus_shp = {
             'shp': 'test/data/Pk50095.tif',
             'shx': 'test/data/Pk50095.tif',
-            'dbf':    'test/data/Pk50095.tfw',
-            'prj':    'test/data/Pk50095.prj'
+            'dbf': 'test/data/Pk50095.tfw',
+            'prj': 'test/data/Pk50095.prj'
         }
 
         self.assertRaises(
@@ -477,8 +477,8 @@ class ModifyingTests(unittest.TestCase):
     def testCoverageCreate(self):
         tiffdata = {
             'tiff': 'test/data/Pk50095.tif',
-            'tfw':    'test/data/Pk50095.tfw',
-            'prj':    'test/data/Pk50095.prj'
+            'tfw':  'test/data/Pk50095.tfw',
+            'prj':  'test/data/Pk50095.prj'
         }
 
         sf = self.cat.get_workspace("sf")
@@ -499,8 +499,8 @@ class ModifyingTests(unittest.TestCase):
 
         bogus_tiff = {
             'tiff': 'test/data/states.shp',
-            'tfw': 'test/data/states.shx',
-            'prj': 'test/data/states.prj'
+            'tfw':  'test/data/states.shx',
+            'prj':  'test/data/states.prj'
         }
 
         self.assertRaises(
@@ -689,6 +689,28 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads'], tas.layers)
         self.assertEqual(tas.styles, [None, None, None], tas.styles)
 
+    def testImageMosaic(self):
+        """
+            Test case for Issue #110
+        """
+        # testing the mosaic creation
+        name = 'cea_mosaic'
+        data = open('test/data/mosaic/cea.zip', 'rb')
+        self.cat.create_imagemosaic(name, data)
+
+        # get the layer resource back
+        self.cat._cache.clear()
+        resource = self.cat.get_layer(name).resource
+
+        self.assert_(resource is not None)
+
+        # delete granule from mosaic
+        coverage = name
+        store = name
+        granule_id = name + '.1'
+        self.cat.mosaic_delete_granule(coverage, store, granule_id)
+
+
     def testTimeDimension(self):
         sf = self.cat.get_workspace("sf")
         files = shapefile_and_friends(os.path.join(gisdata.GOOD_DATA, "time", "boxes_with_end_date"))
@@ -734,7 +756,6 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual('DISCRETE_INTERVAL', timeInfo.presentation)
         self.assertEqual('3 days', timeInfo.resolution_str())
         self.assertEqual('enddate', timeInfo.end_attribute)
-
 
 if __name__ == "__main__":
     unittest.main()
