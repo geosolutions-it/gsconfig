@@ -145,7 +145,7 @@ class Catalog(object):
         self._version = version
         return version
 
-    def delete(self, config_object, purge=False, recurse=False):
+    def delete(self, config_object, purge=None, recurse=False):
         """
         send a delete request
         XXX [more here]
@@ -157,7 +157,7 @@ class Catalog(object):
 
         # purge deletes the SLD from disk when a style is deleted
         if purge:
-            params.append("purge=true")
+            params.append("purge=" + str(purge))
 
         # recurse deletes the resource when a layer is deleted.
         if recurse:
