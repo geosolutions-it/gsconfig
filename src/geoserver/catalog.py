@@ -571,13 +571,15 @@ class Catalog(object):
         schema = json.loads(response, object_hook=_decode_dict)
         return schema
 
-    def mosaic_granules(self, coverage, store, filter=None, limit=None):
+    def mosaic_granules(self, coverage, store, filter=None, limit=None, offset=None):
         '''Print granules of an existing imagemosaic'''
         params = dict()
         if filter is not None:
             params['filter'] = filter
         if limit is not None:
             params['limit'] = limit
+        if offset is not None:
+            params['offset'] = offset
         cs_url = url(self.service_url,
             ["workspaces", store.workspace.name, "coveragestores", store.name, "coverages", coverage, "index/granules.json"], params)
         # GET /workspaces/<ws>/coveragestores/<name>/coverages/<coverage>/index/granules.json
