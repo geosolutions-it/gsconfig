@@ -3,6 +3,8 @@ gsconfig
 
 gsconfig is a python library for manipulating a GeoServer instance via the GeoServer RESTConfig API. 
 
+The project is distributed under a `MIT License <LICENSE.txt>`_ .
+
 Installing
 ==========
 
@@ -14,7 +16,8 @@ For developers: ``git clone git://github.com/opengeo/gsconfig.git && cd gsconfig
 Getting Help
 ============
 There is a brief manual at http://boundlessgeo.github.io/gsconfig/ .
-If you have questions, please ask them on the GeoServer Users mailing list: http://geoserver.org/display/GEOS/Mailing+Lists .
+If you have questions, please ask them on the GeoServer Users mailing list: http://geoserver.org/comm/ .
+
 Please use the Github project at http://github.com/boundlessgeo/gsconfig for any bug reports (and pull requests are welcome, but please include tests where possible.)
 
 Sample Layer Creation Code
