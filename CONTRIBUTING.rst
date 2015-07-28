@@ -10,7 +10,7 @@ Pull requests are welcome, please include a test case where possible:
 
 * For changes over one file in size we ask that you add your details (or your employer details) in the file ``__copyright__``).
 
-We trust you (and your employer) understand the `MIT License<LICENSE.txt>`_ used by gsconfig. This is why we asks you note your copyright details above.
+We trust you (and your employer) understand the `MIT License <LICENSE.txt>`_ used by gsconfig. This is why we asks you note your copyright details above.
  
 The complete list of `contributors <https://github.com/boundlessgeo/gsconfig/network/members>`_ is available on github.
 
