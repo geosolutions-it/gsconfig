@@ -1,6 +1,8 @@
-# Contributing
+Contributing
+============
 
-## Pull Requests
+Pull Requests
+-------------
 
 Pull requests are welcome, please include a test case where possible:
 
@@ -12,7 +14,8 @@ We trust you (and your employer) understand the `MIT License<LICENSE.txt>`_ used
  
 The complete list of `contributors <https://github.com/boundlessgeo/gsconfig/network/members>`_ is available on github.
 
-## Committers
+Committers
+----------
 
 The project committers:
 
