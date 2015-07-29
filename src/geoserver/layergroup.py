@@ -1,3 +1,13 @@
+'''
+gsconfig is a python library for manipulating a GeoServer instance via the GeoServer RESTConfig API.
+
+The project is distributed under a MIT License .
+'''
+
+__author__ = "Ivan Willig"
+__copyright__ = "Copyright 2012-2015 Boundless, Copyright 2010-2012 OpenPlans"
+__license__ = "MIT"
+
 from geoserver.support import ResourceInfo, bbox, write_bbox, \
         write_string, xml_property, url
 
@@ -38,8 +48,7 @@ def _write_styles(builder, styles):
     builder.end("styles")
 
 class LayerGroup(ResourceInfo):
-    """
-    Represents a layer group in geoserver 
+    """    Represents a layer group in geoserver 
     """
 
     resource_type = "layerGroup"
