@@ -283,6 +283,10 @@ def dimension_info(builder, metadata):
             builder.start("strategy", dict())
             builder.data(metadata.strategy)
             builder.end("strategy")
+            if metadata.referenceValue:
+                builder.start("referenceValue", dict())
+                builder.data(metadata.referenceValue)
+                builder.end("referenceValue")
             builder.end("defaultValue")
             
         builder.end("dimensionInfo")
@@ -298,7 +302,7 @@ class DimensionInfo(object):
         ('years', 31536000000)
     )
 
-    def __init__(self, name, enabled, presentation, resolution, units, unitSymbol, strategy=None, attribute=None, end_attribute=None):
+    def __init__(self, name, enabled, presentation, resolution, units, unitSymbol, strategy=None, attribute=None, end_attribute=None, reference_value=None):
         self.name = name
         self.enabled = enabled
         self.attribute = attribute
@@ -308,6 +312,7 @@ class DimensionInfo(object):
         self.units = units
         self.unitSymbol = unitSymbol
         self.strategy = strategy
+        self.referenceValue = reference_value
 
     def _multipier(self, name):
         name = name.lower()
@@ -351,6 +356,7 @@ def md_dimension_info(name, node):
         child_text('strategy'),
         child_text('attribute'),
         child_text('endAttribute'),
+        child_text('referenceValue'),
     )
 
 def dynamic_default_values_info(builder, metadata):
