@@ -166,8 +166,6 @@ class Catalog(object):
         if params:
             rest_url = rest_url + "?" + "&".join(params)
 
-        print " >>>>>>>>>>>>>>>>>>> " + rest_url
-
         headers = {
             "Content-type": "application/xml",
             "Accept": "application/xml"
