@@ -46,7 +46,7 @@ def write_metadata_link_list(name):
             builder.end("metadataLink")
         builder.end("metadataLinks")
     return write
-    
+
 def featuretype_from_index(catalog, workspace, store, node):
     name = node.find("name")
     return FeatureType(catalog, workspace, store, name.text)
@@ -108,6 +108,7 @@ class FeatureType(_ResourceBase):
     url_part_types = 'featuretypes'
 
     title = xml_property("title")
+    native_name = xml_property("nativeName")
     abstract = xml_property("abstract")
     enabled = xml_property("enabled")
     advertised = xml_property("advertised", default="true")
@@ -122,6 +123,7 @@ class FeatureType(_ResourceBase):
 
     writers = dict(
                 name = write_string("name"),
+                nativeName = write_string("nativeName"),
                 title = write_string("title"),
                 abstract = write_string("abstract"),
                 enabled = write_bool("enabled"),
@@ -220,7 +222,7 @@ class Coverage(_ResourceBase):
 class WmsLayer(ResourceInfo):
     resource_type = "wmsLayer"
     save_method = "PUT"
-    
+
     def __init__(self, catalog, workspace, store, name):
         super(WmsLayer, self).__init__()
         self.catalog = catalog
