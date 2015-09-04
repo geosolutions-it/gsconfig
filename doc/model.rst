@@ -38,7 +38,7 @@ Once you have the prerequisite software installed, follow these steps:
 
    $ git clone git://github.com/dwins/gsconfig.py.git
 
-2. Switch directories to the new copy of gsconfig.
+2. Switch directories to the new copy of gsconfig::
 
    $ cd gsconfig.py/
 
@@ -162,10 +162,10 @@ Similar to Layers, you must explicitly save changes to Resources for them to be 
 
     from geoserver.catalog import Catalog
     cat = Catalog("http://localhost:8080/geoserver/rest")
-    that_layer = cat.get_layer("roads")
-    that_layer.enabled = False
+    that_resource = cat.get_resource("roads")
+    that_resource.enabled = False
     # at this point that_layer is still published in GeoServer
-    cat.save(that_layer)
+    cat.save(that_resource)
     # now it is disabled
 
 While FeatureTypes (vector Resources) and Coverages (raster Resources) each provide settings unique to their specific needs, there are some common settings as well:
