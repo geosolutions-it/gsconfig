@@ -10,7 +10,7 @@ Installing
 
 For users: ``pip install gsconfig`` 
 
-For developers: ``git clone git://github.com/opengeo/gsconfig.git && cd gsconfig && python setup.py develop``
+For developers: ``git clone git@github.com:boundlessgeo/gsconfig.git && cd gsconfig && python setup.py develop``
 (`virtualenv <http://virtualenv.org/>`_ to taste.)
 
 Getting Help
