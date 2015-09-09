@@ -689,6 +689,28 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads'], tas.layers)
         self.assertEqual(tas.styles, [None, None, None], tas.styles)
 
+    def testImageMosaic(self):
+        """
+            Test case for Issue #110
+        """
+        # testing the mosaic creation
+        name = 'cea_mosaic'
+        data = open('test/data/mosaic/cea.zip', 'rb')
+        self.cat.create_imagemosaic(name, data)
+
+        # get the layer resource back
+        self.cat._cache.clear()
+        resource = self.cat.get_layer(name).resource
+
+        self.assert_(resource is not None)
+
+        # delete granule from mosaic
+        coverage = name
+        store = name
+        granule_id = name + '.1'
+        self.cat.mosaic_delete_granule(coverage, store, granule_id)
+
+
     def testTimeDimension(self):
         sf = self.cat.get_workspace("sf")
         files = shapefile_and_friends(os.path.join(gisdata.GOOD_DATA, "time", "boxes_with_end_date"))
@@ -734,24 +756,6 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual('DISCRETE_INTERVAL', timeInfo.presentation)
         self.assertEqual('3 days', timeInfo.resolution_str())
         self.assertEqual('enddate', timeInfo.end_attribute)
-
-    def testImageMosaic(self):
-        # testing the mosaic creation
-        name = 'cea_mosaic'
-        data = open('test/data/mosaic/cea.zip', 'rb')
-        self.cat.create_imagemosaic(name, data)
-
-        # get the layer resource back
-        self.cat._cache.clear()
-        resource = self.cat.get_layer(name).resource
-
-        self.assert_(resource is not None)
-
-        # delete granule from mosaic
-        coverage = name
-        store = name
-        granule_id = name + '.1'
-        self.cat.mosaic_delete_granule(coverage, store, granule_id)
 
 if __name__ == "__main__":
     unittest.main()
