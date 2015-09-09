@@ -10,9 +10,9 @@ from geoserver.layergroup import LayerGroup
 from geoserver.util import shapefile_and_friends
 
 DBPARAMS = dict(host="localhost", port="5432", dbtype="postgis",
-    database=os.getenv("DATABASE", "db"),
-    user=os.getenv("DBUSER", "postgres"),
-    passwd=os.getenv("DBPASS", "password")
+    database=os.getenv("DATABASE", "geonode"),
+    user=os.getenv("DBUSER", "geonode"),
+    passwd=os.getenv("DBPASS", "g30n0d3")
 )
 
 try:
@@ -316,10 +316,10 @@ class ModifyingTests(unittest.TestCase):
         self.cat.save(ds)
         ds = self.cat.get_store("gsconfig_import_test")
         self.cat.add_data_to_store(ds, "import", {
-            'shp': 'test/data/states.shp',
-            'shx': 'test/data/states.shx',
-            'dbf': 'test/data/states.dbf',
-            'prj': 'test/data/states.prj'
+            'shp': 'data/states.shp',
+            'shx': 'data/states.shx',
+            'dbf': 'data/states.dbf',
+            'prj': 'data/states.prj'
         })
 
     def testCoverageStoreCreate(self):
@@ -430,12 +430,12 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(False, changed_layer.enabled)
 
     def testFeatureTypeCreate(self):
-        shapefile_plus_sidecars = shapefile_and_friends("test/data/states")
+        shapefile_plus_sidecars = shapefile_and_friends("data/states")
         expected = {
-            'shp': 'test/data/states.shp',
-            'shx': 'test/data/states.shx',
-            'dbf': 'test/data/states.dbf',
-            'prj': 'test/data/states.prj'
+            'shp': 'data/states.shp',
+            'shx': 'data/states.shx',
+            'dbf': 'data/states.dbf',
+            'prj': 'data/states.prj'
         }
 
         self.assertEqual(len(expected), len(shapefile_plus_sidecars))
@@ -458,10 +458,10 @@ class ModifyingTests(unittest.TestCase):
         )
 
         bogus_shp = {
-            'shp': 'test/data/Pk50095.tif',
-            'shx': 'test/data/Pk50095.tif',
-            'dbf': 'test/data/Pk50095.tfw',
-            'prj': 'test/data/Pk50095.prj'
+            'shp': 'data/Pk50095.tif',
+            'shx': 'data/Pk50095.tif',
+            'dbf': 'data/Pk50095.tfw',
+            'prj': 'data/Pk50095.prj'
         }
 
         self.assertRaises(
@@ -476,9 +476,9 @@ class ModifyingTests(unittest.TestCase):
 
     def testCoverageCreate(self):
         tiffdata = {
-            'tiff': 'test/data/Pk50095.tif',
-            'tfw':  'test/data/Pk50095.tfw',
-            'prj':  'test/data/Pk50095.prj'
+            'tiff': 'data/Pk50095.tif',
+            'tfw':  'data/Pk50095.tfw',
+            'prj':  'data/Pk50095.prj'
         }
 
         sf = self.cat.get_workspace("sf")
@@ -498,9 +498,9 @@ class ModifyingTests(unittest.TestCase):
         )
 
         bogus_tiff = {
-            'tiff': 'test/data/states.shp',
-            'tfw':  'test/data/states.shx',
-            'prj':  'test/data/states.prj'
+            'tiff': 'data/states.shp',
+            'tfw':  'data/states.shx',
+            'prj':  'data/states.prj'
         }
 
         self.assertRaises(
@@ -539,13 +539,13 @@ class ModifyingTests(unittest.TestCase):
 
     def testStyles(self):
         # upload new style, verify existence
-        self.cat.create_style("fred", open("test/fred.sld").read())
+        self.cat.create_style("fred", open("fred.sld").read())
         fred = self.cat.get_style("fred")
         self.assert_(fred is not None)
         self.assertEqual("Fred", fred.sld_title)
 
         # replace style, verify changes
-        self.cat.create_style("fred", open("test/ted.sld").read(), overwrite=True)
+        self.cat.create_style("fred", open("ted.sld").read(), overwrite=True)
         fred = self.cat.get_style("fred")
         self.assert_(fred is not None)
         self.assertEqual("Ted", fred.sld_title)
@@ -555,7 +555,7 @@ class ModifyingTests(unittest.TestCase):
         self.assert_(self.cat.get_style("fred") is None)
 
         # attempt creating new style
-        self.cat.create_style("fred", open("test/fred.sld").read())
+        self.cat.create_style("fred", open("fred.sld").read())
         fred = self.cat.get_style("fred")
         self.assertEqual("Fred", fred.sld_title)
 
@@ -566,7 +566,7 @@ class ModifyingTests(unittest.TestCase):
 
     def testWorkspaceStyles(self):
         # upload new style, verify existence
-        self.cat.create_style("jed", open("test/fred.sld").read(), workspace="topp")
+        self.cat.create_style("jed", open("fred.sld").read(), workspace="topp")
 
         jed = self.cat.get_style("jed", workspace="blarny")
         self.assert_(jed is None)
@@ -578,7 +578,7 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual("Fred", jed.sld_title)
 
         # replace style, verify changes
-        self.cat.create_style("jed", open("test/ted.sld").read(), overwrite=True, workspace="topp")
+        self.cat.create_style("jed", open("ted.sld").read(), overwrite=True, workspace="topp")
         jed = self.cat.get_style("jed", workspace="topp")
         self.assert_(jed is not None)
         self.assertEqual("Ted", jed.sld_title)
@@ -588,7 +588,7 @@ class ModifyingTests(unittest.TestCase):
         self.assert_(self.cat.get_style("jed", workspace="topp") is None)
 
         # attempt creating new style
-        self.cat.create_style("jed", open("test/fred.sld").read(), workspace="topp")
+        self.cat.create_style("jed", open("fred.sld").read(), workspace="topp")
         jed = self.cat.get_style("jed", workspace="topp")
         self.assertEqual("Fred", jed.sld_title)
 
@@ -599,8 +599,8 @@ class ModifyingTests(unittest.TestCase):
 
     def testLayerWorkspaceStyles(self):
         # upload new style, verify existence
-        self.cat.create_style("ned", open("test/fred.sld").read(), overwrite=True, workspace="topp")
-        self.cat.create_style("zed", open("test/ted.sld").read(), overwrite=True, workspace="topp")
+        self.cat.create_style("ned", open("fred.sld").read(), overwrite=True, workspace="topp")
+        self.cat.create_style("zed", open("ted.sld").read(), overwrite=True, workspace="topp")
         ned = self.cat.get_style("ned", workspace="topp")
         zed = self.cat.get_style("zed", workspace="topp")
         self.assert_(ned is not None)
@@ -695,7 +695,7 @@ class ModifyingTests(unittest.TestCase):
         """
         # testing the mosaic creation
         name = 'cea_mosaic'
-        data = open('test/data/mosaic/cea.zip', 'rb')
+        data = open('data/mosaic/cea.zip', 'rb')
         self.cat.create_imagemosaic(name, data)
 
         # get the layer resource back
