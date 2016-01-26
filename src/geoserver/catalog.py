@@ -17,7 +17,7 @@ from geoserver.store import coveragestore_from_index, datastore_from_index, \
     wmsstore_from_index, UnsavedDataStore, \
     UnsavedCoverageStore, UnsavedWmsStore
 from geoserver.style import Style
-from geoserver.support import prepare_upload_bundle, url, _decode_list, _decode_dict
+from geoserver.support import prepare_upload_bundle, url, _decode_list, _decode_dict, JDBCVirtualTable
 from geoserver.layergroup import LayerGroup, UnsavedLayerGroup
 from geoserver.workspace import workspace_from_index, Workspace
 from os import unlink
@@ -376,12 +376,15 @@ class Catalog(object):
         upload_url = url(self.service_url, 
             ["workspaces", workspace, "datastores", store, "file.shp"], params) 
 
-        with open(bundle, "rb") as f:
-            data = f.read()
-            headers, response = self.http.request(upload_url, "PUT", data, headers)
-            self._cache.clear()
-            if headers.status != 201:
-                raise UploadError(response)
+        try:
+            with open(bundle, "rb") as f:
+                data = f.read()
+                headers, response = self.http.request(upload_url, "PUT", data, headers)
+                self._cache.clear()
+                if headers.status != 201:
+                    raise UploadError(response)
+        finally:
+            unlink(bundle)
 
     def create_featurestore(self, name, data, workspace=None, overwrite=False, charset=None):
         if not overwrite:
@@ -468,6 +471,12 @@ class Catalog(object):
                 message.close()
 
     def create_coveragestore(self, name, data, workspace=None, overwrite=False):
+        self._create_coveragestore(name, data, workspace, overwrite)
+
+    def create_coveragestore_external_geotiff(self, name, data, workspace=None, overwrite=False):
+        self._create_coveragestore(name, data, workspace=workspace, overwrite=overwrite, external=True)
+
+    def _create_coveragestore(self, name, data, workspace=None, overwrite=False, external=False):
         if not overwrite:
             try:
                 store = self.get_store(name, workspace)
@@ -481,29 +490,36 @@ class Catalog(object):
 
         if workspace is None:
             workspace = self.get_default_workspace()
-        headers = {
-            "Content-type": "image/tiff",
-            "Accept": "application/xml"
-        }
 
         archive = None
         ext = "geotiff"
+        contet_type = "image/tiff" if not external else "text/plain"
+        store_type = "file." if not external else "external."
 
-        if isinstance(data, dict):
-            archive = prepare_upload_bundle(name, data)
-            message = open(archive, 'rb')
-            if "tfw" in data:
-                # If application/archive was used, server crashes with a 500 error
-                # read in many sites that application/zip will do the trick. Successfully tested
-                headers['Content-type'] = 'application/zip'
-                ext = "worldimage"
-        elif isinstance(data, basestring):
-            message = open(data, 'rb')
-        else:
-            message = data
+        headers = {
+            "Content-type": contet_type,
+            "Accept": "application/xml"
+        }
+
+        message = data
+        if not external:
+            if isinstance(data, dict):
+                archive = prepare_upload_bundle(name, data)
+                message = open(archive, 'rb')
+                if "tfw" in data:
+                    # If application/archive was used, server crashes with a 500 error
+                    # read in many sites that application/zip will do the trick. Successfully tested
+                    headers['Content-type'] = 'application/zip'
+                    ext = "worldimage"
+            elif isinstance(data, basestring):
+                message = open(data, 'rb')
+            else:
+                message = data
+
 
         cs_url = url(self.service_url,
-            ["workspaces", workspace.name, "coveragestores", name, "file." + ext])
+            ["workspaces", workspace.name, "coveragestores", name, store_type + ext],
+            { "configure" : "first", "coverageName" : name})
 
         try:
             headers, response = self.http.request(cs_url, "PUT", message, headers)
@@ -617,7 +633,7 @@ class Catalog(object):
         if headers.status != 200:
             raise FailedRequestError(response)
 
-    def publish_featuretype(self, name, store, native_crs, srs=None):
+    def publish_featuretype(self, name, store, native_crs, srs=None, jdbc_virtual_table=None):
         '''Publish a featuretype from data in an existing store'''
         # @todo native_srs doesn't seem to get detected, even when in the DB
         # metadata (at least for postgis in geometry_columns) and then there
@@ -636,7 +652,15 @@ class Catalog(object):
             "Content-type": "application/xml",
             "Accept": "application/xml"
         }
-        headers, response = self.http.request(store.resource_url, "POST", feature_type.message(), headers)
+        
+        resource_url=store.resource_url
+        if jdbc_virtual_table is not None:
+            feature_type.metadata=({'JDBC_VIRTUAL_TABLE':jdbc_virtual_table})
+            params = dict()
+            resource_url=url(self.service_url,
+                ["workspaces", store.workspace.name, "datastores", store.name, "featuretypes.json"], params)
+        
+        headers, response = self.http.request(resource_url, "POST", feature_type.message(), headers)
         feature_type.fetch()
         return feature_type
 
@@ -719,23 +743,37 @@ class Catalog(object):
         # TODO: Filter by style
         return lyrs
 
-    def get_layergroup(self, name=None):
+    def get_layergroup(self, name=None, workspace=None):
         try: 
-            group_url = url(self.service_url, ["layergroups", name + ".xml"])
+            path_parts = ["layergroups", name + ".xml"]
+            if workspace is not None:
+                wks_name = _name(workspace)
+                path_parts = ['workspaces', wks_name] + path_parts
+
+            group_url = url(self.service_url, path_parts)
             group = self.get_xml(group_url)
-            return LayerGroup(self, group.find("name").text)
+            wks_name = group.find("workspace").find("name").text if group.find("workspace") else None
+            return LayerGroup(self, group.find("name").text, wks_name)
         except FailedRequestError:
             return None
 
-    def get_layergroups(self):
-        groups = self.get_xml("%s/layergroups.xml" % self.service_url)
-        return [LayerGroup(self, g.find("name").text) for g in groups.findall("layerGroup")]
+    def get_layergroups(self, workspace=None):
+        wks_name = None
+        path_parts = ['layergroups.xml']
+        if workspace is not None:
+            wks_name = _name(workspace)
+            path_parts = ['workspaces', wks_name] + path_parts
 
-    def create_layergroup(self, name, layers = (), styles = (), bounds = None):
+        groups_url = url(self.service_url, path_parts)
+        groups = self.get_xml(groups_url)
+        return [LayerGroup(self, g.find("name").text, wks_name) for g in groups.findall("layerGroup")]
+
+    def create_layergroup(self, name, layers = (), styles = (), bounds = None, workspace = None):
         if any(g.name == name for g in self.get_layergroups()):
             raise ConflictingDataError("LayerGroup named %s already exists!" % name)
         else:
-            return UnsavedLayerGroup(self, name, layers, styles, bounds)
+            return UnsavedLayerGroup(self, name, layers, styles, bounds,
+                                     workspace)
 
     def get_style(self, name, workspace=None):
         '''Find a Style in the catalog if one exists that matches the given name.
@@ -767,12 +805,17 @@ class Catalog(object):
             workspace = rest_parts[rest_parts.index('workspaces') + 1]
         return Style(self, dom.find("name").text, workspace)
 
-    def get_styles(self):
-        styles_url = url(self.service_url, ["styles.xml"])
+    def get_styles(self, workspace=None):
+        styles_xml = "styles.xml"
+
+        if workspace is not None:
+            styles_xml = "workspaces/{0}/styles.xml".format(_name(workspace))
+
+        styles_url = url(self.service_url, [styles_xml])
         description = self.get_xml(styles_url)
         return [Style(self, s.find('name').text) for s in description.findall("style")]
 
-    def create_style(self, name, data, overwrite = False, workspace=None):
+    def create_style(self, name, data, overwrite = False, workspace=None, style_format="sld10", raw=False):
         style = self.get_style(name, workspace)
         if not overwrite and style is not None:
             raise ConflictingDataError("There is already a style named %s" % name)
@@ -783,20 +826,23 @@ class Catalog(object):
                 "Accept": "application/xml"
             }
             xml = "<style><name>{0}</name><filename>{0}.sld</filename></style>".format(name)
-            style = Style(self, name, workspace)
+            style = Style(self, name, workspace, style_format)
             headers, response = self.http.request(style.create_href, "POST", xml, headers)
             if headers.status < 200 or headers.status > 299: raise UploadError(response)
 
         headers = {
-            "Content-type": "application/vnd.ogc.sld+xml",
+            "Content-type": style.content_type,
             "Accept": "application/xml"
         }
 
-        headers, response = self.http.request(style.body_href(), "PUT", data, headers)
+        body_href = style.body_href
+        if raw:
+            body_href += "?raw=true"
+        headers, response = self.http.request(body_href, "PUT", data, headers)
         if headers.status < 200 or headers.status > 299: raise UploadError(response)
 
         self._cache.pop(style.href, None)
-        self._cache.pop(style.body_href(), None)
+        self._cache.pop(style.body_href, None)
 
     def create_workspace(self, name, uri):
         xml = ("<namespace>"

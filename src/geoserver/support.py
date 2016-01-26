@@ -129,11 +129,12 @@ def write_bbox(name):
 def write_string_list(name):
     def write(builder, words):
         builder.start(name, dict())
-        words = [w for w in words if len(w) > 0]
-        for w in words:
-            builder.start("string", dict())
-            builder.data(w)
-            builder.end("string")
+        if words:
+            words = [w for w in words if len(w) > 0]
+            for w in words:
+                builder.start("string", dict())
+                builder.data(w)
+                builder.end("string")
         builder.end(name)
     return write
 
@@ -156,6 +157,8 @@ def write_metadata(name):
                 dimension_info(builder, v)
             elif k == 'DynamicDefaultValues':
                 dynamic_default_values_info(builder, v)
+            elif k == 'JDBC_VIRTUAL_TABLE':
+                jdbc_virtual_table(builder, v)
             else:
                 builder.data(v)
             builder.end("entry")
@@ -356,6 +359,9 @@ def md_dimension_info(name, node):
     """Extract metadata Dimension Info from an xml node"""
     child_text = lambda child_name: getattr(node.find(child_name), 'text', None)
     resolution = child_text('resolution')
+    defaultValue = node.find("defaultValue")
+    strategy = defaultValue.find("strategy") if defaultValue is not None else None
+    strategy = strategy.text if strategy is not None else None
     return DimensionInfo(
         name, 
         child_text('enabled') == 'true',
@@ -363,7 +369,8 @@ def md_dimension_info(name, node):
         int(resolution) if resolution else None,
         child_text('units'),
         child_text('unitSymbol'),
-        child_text('strategy'),
+        # child_text('strategy'),
+        strategy,
         child_text('attribute'),
         child_text('endAttribute'),
         child_text('referenceValue'),
@@ -418,9 +425,110 @@ def md_dynamic_default_values_info(name, node):
             defaultValueExpression = defaultValueExpression.text if defaultValueExpression is not None else None
             
             configurations.append(DynamicDefaultValuesConfiguration(dimension, policy, defaultValueExpression))
-            
+
     return DynamicDefaultValues(name, configurations)
 
+class JDBCVirtualTableGeometry(object):
+    def __init__(self, _name, _type, _srid):
+        self.name = _name
+        self.type = _type
+        self.srid = _srid
+
+class JDBCVirtualTableParam(object):
+    def __init__(self, _name, _defaultValue, _regexpValidator):
+        self.name = _name
+        self.defaultValue = _defaultValue
+        self.regexpValidator = _regexpValidator
+
+class JDBCVirtualTable(object):
+    def __init__(self, _name, _sql, _escapeSql, _geometry, _keyColumn=None, _parameters=None):
+        self.name = _name
+        self.sql = _sql
+        self.escapeSql = _escapeSql
+        self.geometry = _geometry
+        self.keyColumn = _keyColumn
+        self.parameters = _parameters
+
+def jdbc_virtual_table(builder, metadata):
+    if isinstance(metadata, JDBCVirtualTable):
+        builder.start("virtualTable", dict())
+        # name
+        builder.start("name", dict())
+        builder.data(metadata.name)
+        builder.end("name")
+        # sql
+        builder.start("sql", dict())
+        builder.data(metadata.sql)
+        builder.end("sql")
+        # escapeSql
+        builder.start("escapeSql", dict())
+        builder.data(metadata.escapeSql)
+        builder.end("escapeSql")
+        # keyColumn
+        if metadata.keyColumn is not None:
+            builder.start("keyColumn", dict())
+            builder.data(metadata.keyColumn)
+            builder.end("keyColumn")
+            
+        # geometry
+        if metadata.geometry is not None:
+            g = metadata.geometry
+            builder.start("geometry", dict())
+            if g.name is not None:
+                builder.start("name", dict())
+                builder.data(g.name)
+                builder.end("name")
+            if g.type is not None:
+                builder.start("type", dict())
+                builder.data(g.type)
+                builder.end("type")
+            if g.srid is not None:
+                builder.start("srid", dict())
+                builder.data(g.srid)
+                builder.end("srid")
+            builder.end("geometry")
+            
+        # parameters
+        if metadata.parameters is not None:
+            for p in metadata.parameters:
+                builder.start("parameter", dict())
+                if p.name is not None:
+                    builder.start("name", dict())
+                    builder.data(p.name)
+                    builder.end("name")
+                if p.defaultValue is not None:
+                    builder.start("defaultValue", dict())
+                    builder.data(p.defaultValue)
+                    builder.end("defaultValue")
+                if p.regexpValidator is not None:
+                    builder.start("regexpValidator", dict())
+                    builder.data(p.regexpValidator)
+                    builder.end("regexpValidator")
+                builder.end("parameter")
+                
+        builder.end("virtualTable")
+
+def md_jdbc_virtual_table(key, node):
+    """Extract metadata JDBC Virtual Tables from an xml node"""
+    name = node.find("name")
+    sql = node.find("sql")
+    escapeSql = node.find("escapeSql")
+    escapeSql = escapeSql.text if escapeSql is not None else None
+    keyColumn = node.find("keyColumn")
+    keyColumn = keyColumn.text if keyColumn is not None else None
+    n_g = node.find("geometry")
+    geometry = JDBCVirtualTableGeometry(n_g.find("name"),n_g.find("type"),n_g.find("srid"))
+    parameters = []
+    for n_p in node.findall("parameter"):
+        p_name = n_p.find("name")
+        p_defaultValue = n_p.find("defaultValue")
+        p_defaultValue = p_defaultValue.text if p_defaultValue is not None else None
+        p_regexpValidator = n_p.find("regexpValidator")
+        p_regexpValidator = p_regexpValidator.text if p_regexpValidator is not None else None
+        parameters.append(JDBCVirtualTableParam(p_name, p_defaultValue, p_regexpValidator))
+        
+    return JDBCVirtualTable(name, sql, escapeSql, geometry, keyColumn, parameters)
+    
 def md_entry(node):
     """Extract metadata entries from an xml node"""
     key = None
@@ -434,6 +542,8 @@ def md_entry(node):
         value = md_dimension_info(key, node.find("dimensionInfo"))
     elif key == 'DynamicDefaultValues':
         value = md_dynamic_default_values_info(key, node.find("DynamicDefaultValues"))
+    elif key == 'JDBC_VIRTUAL_TABLE':
+        value = md_jdbc_virtual_table(key, node.find("virtualTable"))
     else:
         value = node.text
         

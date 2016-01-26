@@ -1,4 +1,5 @@
-import os
+import os, subprocess, atexit, signal, tempfile
+import time
 import re
 import unittest
 import gisdata
@@ -6,6 +7,7 @@ from geoserver.catalog import Catalog, ConflictingDataError, UploadError, \
     FailedRequestError
 from geoserver.support import ResourceInfo, url
 from geoserver.support import DimensionInfo
+from geoserver.support import JDBCVirtualTable, JDBCVirtualTableGeometry, JDBCVirtualTableParam
 from geoserver.layergroup import LayerGroup
 from geoserver.util import shapefile_and_friends
 
@@ -35,6 +37,41 @@ if GEOSERVER_HOME:
         os.system('git clean -dxf -- %s' % data)
     os.system('curl -XPOST --user admin:geoserver http://localhost:8080/geoserver/rest/reload')
 
+# set GS_VERSION to None in order to skip the GeoServer setup
+global child_pid
+GS_BASE_DIR = tempfile.gettempdir()
+# use "master" in order to test against the latest GeoServer version
+GS_VERSION = os.getenv('GS_VERSION') if os.getenv('GS_VERSION') else None
+if GS_VERSION:
+    subprocess.Popen(["rm", "-rf", GS_BASE_DIR + "/gs"]).communicate()
+    subprocess.Popen(["mkdir", GS_BASE_DIR + "/gs"]).communicate()
+    subprocess.Popen(["wget",
+                      "http://repo2.maven.org/maven2/org/mortbay/jetty/jetty-runner/8.1.8.v20121106/jetty-runner-8.1.8.v20121106.jar",
+                      "-P", GS_BASE_DIR + "/gs"]).communicate()
+    subprocess.Popen(["wget",
+                      "http://ares.boundlessgeo.com/geoserver/" + GS_VERSION +"/geoserver-" + GS_VERSION + "-latest-war.zip",
+                      "-P", GS_BASE_DIR + "/gs"]).communicate()
+    subprocess.Popen(["unzip", "-o", "-d", GS_BASE_DIR + "/gs",
+                      GS_BASE_DIR + "/gs/geoserver-" + GS_VERSION + "-latest-war.zip"]).communicate()
+    FNULL = open(os.devnull, 'w')
+    proc = subprocess.Popen(["java", "-Xmx512m", "-XX:MaxPermSize=256m",
+                             "-Dorg.eclipse.jetty.server.webapp.parentLoaderPriority=true",
+                             "-jar", GS_BASE_DIR + "/gs/jetty-runner-8.1.8.v20121106.jar",
+                             "--path", "/geoserver", GS_BASE_DIR + "/gs/geoserver.war"],
+                             stdout=FNULL, stderr=subprocess.STDOUT)
+    child_pid = proc.pid
+    print "Sleep (90)..."
+    time.sleep(90)
+
+def kill_child():
+    if child_pid is None:
+        pass
+    else:
+        subprocess.Popen(["rm", "-Rf", GS_BASE_DIR + "/gs"]).communicate()
+        print "KILLING PROCESS: " + str(child_pid)
+        os.kill(child_pid, signal.SIGTERM)
+
+atexit.register(kill_child)
 
 def drop_table(table):
     def outer(func):
@@ -89,7 +126,7 @@ class CatalogTests(unittest.TestCase):
 
     def testWorkspaces(self):
         self.assertEqual(7, len(self.cat.get_workspaces()))
-        # marking out test since geoserver default workspace is not consistent 
+        # marking out test since geoserver default workspace is not consistent
         # self.assertEqual("cite", self.cat.get_default_workspace().name)
         self.assertEqual("topp", self.cat.get_workspace("topp").name)
 
@@ -106,7 +143,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual("sfdem", self.cat.get_store("sfdem", sf).name)
         self.assertEqual("sfdem", self.cat.get_store("sfdem").name)
 
-  
+
     def testResources(self):
         topp = self.cat.get_workspace("topp")
         sf = self.cat.get_workspace("sf")
@@ -141,6 +178,35 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual("sfdem", self.cat.get_resource("sfdem", workspace=sf).name)
         self.assertEqual("sfdem", self.cat.get_resource("sfdem").name)
 
+    def testResourcesUpdate(self):
+        res_dest = self.cat.get_resources()
+        count = 0
+
+        for rd in res_dest:
+            # only wms layers
+            if rd.resource_type != "wmsLayer": continue
+            # looking for same name
+            ro = self.cat.get_resource(rd.name)
+
+            if ro is not None:
+                rd.title  = ro.title
+                rd.abstract  = ro.abstract
+                rd.keywords  = ro.keywords
+                rd.projection  = ro.projection
+                rd.native_bbox  = ro.native_bbox
+                rd.latlon_bbox  = ro.latlon_bbox
+                rd.projection_policy  = ro.projection_policy
+                rd.enabled  = ro.enabled
+                rd.advertised  = ro.advertised
+                rd.metadata_links = ro.metadata_links or None
+
+                self.cat.save(rd)
+                self.cat.reload()
+
+                # print "Updated layer: " + rd.name
+                count += 1
+
+        # print "Total updated layers: " + str(count)
 
     def testLayers(self):
         expected = set(["Arc_Sample", "Pk50095", "Img_Sample", "mosaic", "sfdem",
@@ -177,8 +243,20 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads', 'tasmania_cities'], tas.layers)
         self.assertEqual(tas.styles, [None, None, None, None], tas.styles)
 
+        # Try to create a new Layer Group into the "topp" workspace
+        self.assert_(self.cat.get_workspace("topp") is not None)
+        tas2 = self.cat.create_layergroup("tasmania_reloaded", tas.layers, workspace = "topp")
+        self.cat.save(tas2)
+        self.assert_(self.cat.get_layergroup("tasmania_reloaded") is None)
+        self.assert_(self.cat.get_layergroup("tasmania_reloaded", "topp") is not None)
+        tas2 = self.cat.get_layergroup("tasmania_reloaded", "topp")
+        self.assert_("tasmania_reloaded", tas2.name)
+        self.assert_(isinstance(tas2, LayerGroup))
+        self.assertEqual(tas2.workspace, "topp", tas2.workspace)
+        self.assertEqual(tas2.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads', 'tasmania_cities'], tas2.layers)
+        self.assertEqual(tas2.styles, [None, None, None, None], tas2.styles)
+
     def testStyles(self):
-        self.assertEqual(20, len(self.cat.get_styles()))
         self.assertEqual("population", self.cat.get_style("population").name)
         self.assertEqual("popshade.sld", self.cat.get_style("population").filename)
         self.assertEqual("population", self.cat.get_style("population").sld_name)
@@ -223,6 +301,7 @@ class CatalogTests(unittest.TestCase):
 
 
 class ModifyingTests(unittest.TestCase):
+
     def setUp(self):
         self.cat = Catalog("http://localhost:8080/geoserver/rest")
 
@@ -247,7 +326,7 @@ class ModifyingTests(unittest.TestCase):
         rs = self.cat.get_resource("bugsites")
         self.assertEqual(["bugsites", "gsconfig"], rs.keywords)
         self.assertEqual(enabled, rs.enabled)
-        
+
         # Change metadata links on server
         rs.metadata_links = [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")]
         enabled = rs.enabled
@@ -327,11 +406,34 @@ class ModifyingTests(unittest.TestCase):
             'prj': 'data/states.prj'
         })
 
+    @drop_table('import2')
+    def testVirtualTables(self):
+        ds = self.cat.create_datastore("gsconfig_import_test2")
+        ds.connection_parameters.update(**DBPARAMS)
+    #     ds.data_url = "file:data/mytiff.tiff"
+        ds = self.cat.get_store("gsconfig_import_test2")
+        self.cat.add_data_to_store(ds, "import2", {
+            'shp': 'test/data/states.shp',
+            'shx': 'test/data/states.shx',
+            'dbf': 'test/data/states.dbf',
+            'prj': 'test/data/states.prj'
+        })
+        store = self.cat.get_store("gsconfig_import_test2")
+        geom = JDBCVirtualTableGeometry('the_geom','MultiPolygon','4326')
+        ft_name = 'my_jdbc_vt_test'
+        epsg_code = 'EPSG:4326'
+        sql = "select * from import2 where 'STATE_NAME' = 'Illinois'"
+        keyColumn = None
+        parameters = None
+
+        jdbc_vt = JDBCVirtualTable(ft_name, sql, 'false', geom, keyColumn, parameters)
+        ft = self.cat.publish_featuretype(ft_name, store, epsg_code, jdbc_virtual_table=jdbc_vt)
+
     # DISABLED; this test works only in the very particular case 
     # "mytiff.tiff" is already present into the GEOSERVER_DATA_DIR
     # def testCoverageStoreCreate(self):
     #     ds = self.cat.create_coveragestore2("coverage_gsconfig")
-    #     ds.data_url = "file:data/mytiff.tiff"
+    #     ds.data_url = "file:test/data/mytiff.tiff"
     #     self.cat.save(ds)
 
     def testCoverageStoreModify(self):
@@ -345,7 +447,7 @@ class ModifyingTests(unittest.TestCase):
         # not sure about order of test runs here, but it might cause problems
         # for other tests if this layer is misconfigured
         cs.type = "GeoTIFF"
-        self.cat.save(cs) 
+        self.cat.save(cs)
 
     def testCoverageSave(self):
         # test saving round trip
@@ -406,7 +508,7 @@ class ModifyingTests(unittest.TestCase):
         ws.capabilitiesURL = "http://suite.opengeo.org/geoserver/ows?service=wms&version=1.1.1&request=GetCapabilities"
         ws.type = "WMS"
         self.cat.save(ws)
-     
+
     def testWmsLayer(self):
         self.cat.create_workspace("wmstest", "http://example.com/wmstest")
         wmstest = self.cat.get_workspace("wmstest")
@@ -436,6 +538,15 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(False, changed_layer.advertised)
         self.assertEqual(False, changed_layer.enabled)
 
+        # Testing projection and projection policy changes
+        changed_layer.projection = "EPSG:900913"
+        changed_layer.projection_policy = "REPROJECT_TO_DECLARED"
+        self.cat.save(changed_layer)
+        self.cat._cache.clear()
+        layer = self.cat.get_layer(changed_layer.name)
+        self.assertEqual(layer.resource.projection_policy, changed_layer.projection_policy)
+        self.assertEqual(layer.resource.projection, changed_layer.projection)
+
     def testFeatureTypeCreate(self):
         shapefile_plus_sidecars = shapefile_and_friends("data/states")
         expected = {
@@ -448,14 +559,14 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(len(expected), len(shapefile_plus_sidecars))
         for k, v in expected.iteritems():
             self.assertEqual(v, shapefile_plus_sidecars[k])
- 
+
         sf = self.cat.get_workspace("sf")
         self.cat.create_featurestore("states_test", shapefile_plus_sidecars, sf)
 
         self.assert_(self.cat.get_resource("states_test", workspace=sf) is not None)
 
         self.assertRaises(
-            ConflictingDataError, 
+            ConflictingDataError,
             lambda: self.cat.create_featurestore("states_test", shapefile_plus_sidecars, sf)
         )
 
@@ -489,18 +600,17 @@ class ModifyingTests(unittest.TestCase):
         }
 
         sf = self.cat.get_workspace("sf")
-        # TODO: Uploading WorldImage file no longer works???
-        # ft = self.cat.create_coveragestore("Pk50095", tiffdata, sf)
+        ft = self.cat.create_coveragestore("Pk50095", tiffdata, sf)
 
-        # self.assert_(self.cat.get_resource("Pk50095", workspace=sf) is not None)
-
-        # self.assertRaises(
-        #         ConflictingDataError, 
-        #         lambda: self.cat.create_coveragestore("Pk50095", tiffdata, sf)
-        # )
+        self.assert_(self.cat.get_resource("Pk50095", workspace=sf) is not None)
 
         self.assertRaises(
-            UploadError, 
+                ConflictingDataError,
+                lambda: self.cat.create_coveragestore("Pk50095", tiffdata, sf)
+        )
+
+        self.assertRaises(
+            UploadError,
             lambda: self.cat.create_featurestore("Pk50095_vector", tiffdata, sf)
         )
 
@@ -514,6 +624,8 @@ class ModifyingTests(unittest.TestCase):
             UploadError,
             lambda: self.cat.create_coveragestore("states_raster", bogus_tiff)
         )
+
+        ft_ext = self.cat.create_coveragestore_external_geotiff("Pk50095_ext", 'file:test/data/Pk50095.tif', sf)
 
     def testLayerSave(self):
         # test saving round trip
@@ -534,7 +646,7 @@ class ModifyingTests(unittest.TestCase):
         self.assertEqual(old_attribution, lyr.attribution)
 
         self.assertEqual(lyr.default_style.name, "population")
-     
+
         old_default_style = lyr.default_style
         lyr.default_style = (s for s in lyr.styles if s.name == "pophatch").next()
         lyr.styles = [old_default_style]
@@ -545,6 +657,9 @@ class ModifyingTests(unittest.TestCase):
 
 
     def testStyles(self):
+        # check count before tests (upload)
+        count = len(self.cat.get_styles())
+
         # upload new style, verify existence
         self.cat.create_style("fred", open("fred.sld").read())
         fred = self.cat.get_style("fred")
@@ -570,6 +685,14 @@ class ModifyingTests(unittest.TestCase):
         f = self.cat.get_style_by_url(fred.href)
         self.assert_(f is not None)
         self.assertEqual(f.name, fred.name)
+
+        # compare count after upload
+        self.assertEqual(count +1, len(self.cat.get_styles()))
+
+        # attempt creating a new style without "title"
+        self.cat.create_style("notitle", open("test/notitle.sld").read())
+        notitle = self.cat.get_style("notitle")
+        self.assertEqual(None, notitle.sld_title)
 
     def testWorkspaceStyles(self):
         # upload new style, verify existence
@@ -631,7 +754,7 @@ class ModifyingTests(unittest.TestCase):
         ws = self.cat.get_workspace("acme")
         self.assertEqual("acme", ws.name)
 
-    def testWorkspaceDelete(self): 
+    def testWorkspaceDelete(self):
         self.cat.create_workspace("foo", "http://example.com/foo")
         ws = self.cat.get_workspace("foo")
         self.cat.delete(ws)
@@ -702,7 +825,7 @@ class ModifyingTests(unittest.TestCase):
         """
         # testing the mosaic creation
         name = 'cea_mosaic'
-        data = open('data/mosaic/cea.zip', 'rb')
+        data = open('test/data/mosaic/cea.zip', 'rb')
         self.cat.create_imagemosaic(name, data)
 
         # get the layer resource back

@@ -54,13 +54,14 @@ class LayerGroup(ResourceInfo):
     resource_type = "layerGroup"
     save_method = "PUT"
 
-    def __init__(self, catalog, name):
+    def __init__(self, catalog, name, workspace=None):
         super(LayerGroup, self).__init__()
 
         assert isinstance(name, basestring)
 
         self.catalog = catalog
         self.name = name
+        self.workspace = workspace
 
         # the XML format changed in 2.3.x - the element listing all the layers
         # and the entries themselves have changed
@@ -75,12 +76,17 @@ class LayerGroup(ResourceInfo):
             name = write_string("name"),
             styles = _write_styles,
             layers = lambda b,l: _write_layers(b, l, parent, element, attributes),
-            bounds = write_bbox("bounds")
+            bounds = write_bbox("bounds"),
+            workspace = write_string("workspace")
         )
 
     @property
     def href(self):
-        return url(self.catalog.service_url, ["layergroups", self.name + ".xml"])
+        path_parts = ["layergroups", self.name + ".xml"]
+        if self.workspace is not None:
+            workspace_name = getattr(self.workspace, 'name', self.workspace)
+            path_parts = ["workspaces", workspace_name] + path_parts
+        return url(self.catalog.service_url, path_parts)
 
     styles = xml_property("styles", _style_list)
     bounds = xml_property("bounds", bbox)
@@ -109,11 +115,17 @@ class LayerGroup(ResourceInfo):
 
 class UnsavedLayerGroup(LayerGroup):
     save_method = "POST"
-    def __init__(self, catalog, name, layers, styles, bounds):
-        super(UnsavedLayerGroup, self).__init__(catalog, name)
+    def __init__(self, catalog, name, layers, styles, bounds, workspace = None):
+        super(UnsavedLayerGroup, self).__init__(catalog, name, workspace=workspace)
         bounds = bounds if bounds is not None else ("-180","180","-90","90","EPSG:4326")
-        self.dirty.update(name = name, layers = layers, styles = styles, bounds = bounds)
+        self.dirty.update(name = name, layers = layers, styles = styles,
+                          bounds = bounds, workspace = workspace)
 
     @property
     def href(self):
-        return "%s/layergroups?name=%s" % (self.catalog.service_url, self.name)
+        query = {'name': self.name}
+        path_parts = ['layergroups']
+        if self.workspace is not None:
+            workspace_name = getattr(self.workspace, 'name', self.workspace)
+            path_parts = ["workspaces", workspace_name] + path_parts
+        return url(self.catalog.service_url, path_parts, query)

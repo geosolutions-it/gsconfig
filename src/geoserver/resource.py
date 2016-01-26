@@ -28,23 +28,24 @@ def metadata_link_list(node):
 def write_metadata_link_list(name):
     def write(builder, md_links):
         builder.start(name, dict())
-        for (mime, md_type, content_url) in md_links:
-            # geoserver supports only three mime
-            if md_type not in ['ISO19115:2003', 'FGDC', 'TC211']:
-                mime = 'other'
-                md_type = 'other'
-            builder.start("metadataLink", dict())
-            builder.start("type", dict())
-            builder.data(mime)
-            builder.end("type")
-            builder.start("metadataType", dict())
-            builder.data(md_type)
-            builder.end("metadataType")
-            builder.start("content", dict())
-            builder.data(content_url)
-            builder.end("content")
-            builder.end("metadataLink")
-        builder.end("metadataLinks")
+        if md_links:
+            for (mime, md_type, content_url) in md_links:
+                # geoserver supports only three mime
+                if md_type not in ['ISO19115:2003', 'FGDC', 'TC211']:
+                    mime = 'other'
+                    md_type = 'other'
+                builder.start("metadataLink", dict())
+                builder.start("type", dict())
+                builder.data(mime)
+                builder.end("type")
+                builder.start("metadataType", dict())
+                builder.data(md_type)
+                builder.end("metadataType")
+                builder.start("content", dict())
+                builder.data(content_url)
+                builder.end("content")
+                builder.end("metadataLink")
+        builder.end(name)
     return write
 
 def featuretype_from_index(catalog, workspace, store, node):
@@ -259,10 +260,10 @@ class WmsLayer(ResourceInfo):
                 abstract = write_string("abstract"),
                 keywords = write_string_list("keywords"),
                 # nativeCRS
-                projection = write_string("srs"),
+                srs = write_string("srs"),
                 nativeBoundingBox = write_bbox("nativeBoundingBox"),
                 latLonBoundingBox = write_bbox("latLonBoundingBox"),
-                projection_policy = write_string("projectionPolicy"),
+                projectionPolicy = write_string("projectionPolicy"),
                 enabled = write_bool("enabled"),
                 advertised = write_bool("advertised"),
                 metadataLinks = write_metadata_link_list("metadataLinks")

@@ -11,13 +11,22 @@ __license__ = "MIT"
 from geoserver.support import ResourceInfo, url, xml_property
 
 class Style(ResourceInfo):
-    def __init__(self, catalog, name, workspace=None):
+    supported_formats = ["sld10", "sld11", "zip"]
+    content_types = {
+        "sld10": "application/vnd.ogc.sld+xml",
+        "sld11": "application/vnd.ogc.se+xml",
+        "zip": "application/zip"
+    }
+
+    def __init__(self, catalog, name, workspace=None, style_format="sld10"):
         super(Style, self).__init__()
         assert isinstance(name, basestring)
+        assert style_format in Style.supported_formats
 
         self.catalog = catalog
         self.workspace = workspace
         self.name = name
+        self.style_format = style_format
         self._sld_dom = None
 
     @property
@@ -36,6 +45,10 @@ class Style(ResourceInfo):
     def create_href(self):
         return self._build_href('.xml', True)
 
+    @property
+    def content_type(self):
+        return Style.content_types[self.style_format]
+
     def _build_href(self, extension, create=False):
         path_parts = ["styles"]
         query = {}
@@ -51,7 +64,7 @@ class Style(ResourceInfo):
 
     def _get_sld_dom(self):
         if self._sld_dom is None:
-            self._sld_dom = self.catalog.get_xml(self.body_href())
+            self._sld_dom = self.catalog.get_xml(self.body_href)
         return self._sld_dom
 
     @property
@@ -61,7 +74,11 @@ class Style(ResourceInfo):
             user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}UserLayer/{http://www.opengis.net/sld}UserStyle")
         
         if user_style:
-            title_node = user_style.find("{http://www.opengis.net/sld}Title")
+            try:
+                # it is not mandatory
+                title_node = user_style.find("{http://www.opengis.net/sld}Title")
+            except:
+                title_node = None
         
         return title_node.text if title_node is not None else None
 
@@ -72,16 +89,20 @@ class Style(ResourceInfo):
             user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}UserLayer/{http://www.opengis.net/sld}UserStyle")
         
         if user_style:
-            name_node = user_style.find("{http://www.opengis.net/sld}Name")
+            try:
+                # it is not mandatory
+                name_node = user_style.find("{http://www.opengis.net/sld}Name")
+            except:
+                name_node = None
             
         return name_node.text if name_node is not None else None
 
     @property
     def sld_body(self):
-        content = self.catalog.http.request(self.body_href())[1]
+        content = self.catalog.http.request(self.body_href)[1]
         return content
 
     def update_body(self, body):
-        headers = { "Content-Type": "application/vnd.ogc.sld+xml" }
+        headers = { "Content-Type": self.content_type }
         self.catalog.http.request(
-            self.body_href(), "PUT", body, headers)
+            self.body_href, "PUT", body, headers)
