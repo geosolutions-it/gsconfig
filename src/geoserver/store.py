@@ -8,230 +8,103 @@ __author__ = "David Winslow"
 __copyright__ = "Copyright 2012-2015 Boundless, Copyright 2010-2012 OpenPlans"
 __license__ = "MIT"
 
-import geoserver.workspace as ws
-from geoserver.resource import featuretype_from_index, coverage_from_index, \
-        wmslayer_from_index
-from geoserver.support import ResourceInfo, xml_property, key_value_pairs, \
-        write_bool, write_dict, write_string, url
+from geoserver.support import ResourceInfo, url, xml_property
 
-def datastore_from_index(catalog, workspace, node):
-    name = node.find("name")
-    return DataStore(catalog, workspace, name.text)
+class Style(ResourceInfo):
+    supported_formats = ["sld10", "sld11", "zip"]
+    content_types = {
+        "sld10": "application/vnd.ogc.sld+xml",
+        "sld11": "application/vnd.ogc.se+xml",
+        "zip": "application/zip"
+    }
 
-def coveragestore_from_index(catalog, workspace, node):
-    name = node.find("name")
-    return CoverageStore(catalog, workspace, name.text)
-
-def wmsstore_from_index(catalog, workspace, node):
-    name = node.find("name")
-    #user = node.find("user")
-    #password = node.find("password")
-    return WmsStore(catalog, workspace, name.text, None, None)
-
-class DataStore(ResourceInfo):
-    resource_type = "dataStore"
-    save_method = "PUT"
-
-    def __init__(self, catalog, workspace, name):
-        super(DataStore, self).__init__()
-
-        assert isinstance(workspace, ws.Workspace)
+    def __init__(self, catalog, name, workspace=None, style_format="sld10"):
+        super(Style, self).__init__()
         assert isinstance(name, basestring)
+        assert style_format in Style.supported_formats
+
         self.catalog = catalog
         self.workspace = workspace
         self.name = name
+        self.style_format = style_format
+        self._sld_dom = None
+
+    @property
+    def fqn(self):
+        return self.name if not self.workspace else '%s:%s' % (self.workspace, self.name)
 
     @property
     def href(self):
-        return url(self.catalog.service_url, 
-            ["workspaces", self.workspace.name, "datastores", self.name + ".xml"])
-
-    enabled = xml_property("enabled", lambda x: x.text == "true")
-    name = xml_property("name")
-    type = xml_property("type")
-    connection_parameters = xml_property("connectionParameters", key_value_pairs)
-
-    writers = dict(enabled = write_bool("enabled"),
-                   name = write_string("name"),
-                   type = write_string("type"),
-                   connectionParameters = write_dict("connectionParameters"))
+        return self._build_href('.xml')
 
     @property
-    def resource_url(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "datastores", self.name, "featuretypes.xml"])
+    def body_href(self):
+        return self._build_href('.sld')
 
-    def get_resources(self, name=None, available=False):
-        res_url = self.resource_url
-        if available:
-            res_url += "?list=available"
-        xml = self.catalog.get_xml(res_url)
-        def ft_from_node(node):
-            return featuretype_from_index(self.catalog, self.workspace, self, node)
+    @property
+    def create_href(self):
+        return self._build_href('.xml', True)
 
-        #if name passed, return only one FeatureType, otherwise return all FeatureTypes in store:
-        if name is not None:
-            for node in xml.findall("featureType"):
-                if node.findtext("name") == name:
-                    return ft_from_node(node)
-            return None
-        if available:
-            return [str(node.text) for node in xml.findall("featureTypeName")]
+    @property
+    def content_type(self):
+        return Style.content_types[self.style_format]
+
+    def _build_href(self, extension, create=False):
+        path_parts = ["styles"]
+        query = {}
+        if not create:
+            path_parts.append(self.name + extension)
         else:
-            return [ft_from_node(node) for node in xml.findall("featureType")]
+            query['name'] = self.name
+        if self.workspace is not None:
+            path_parts = ["workspaces", getattr(self.workspace, 'name', self.workspace)] + path_parts
+        return url(self.catalog.service_url, path_parts, query)
 
+    filename = xml_property("filename")
 
-class UnsavedDataStore(DataStore):
-    save_method = "POST"
-
-    def __init__(self, catalog, name, workspace):
-        super(UnsavedDataStore, self).__init__(catalog, workspace, name)
-        self.dirty.update(dict(
-            name=name, enabled=True,  type=None,
-            connectionParameters=dict()))
-
-    @property
-    def href(self):
-        path = [ "workspaces",
-                 self.workspace.name, "datastores"]
-        query = dict(name=self.name)
-        return url(self.catalog.service_url, path, query)
-
-class CoverageStore(ResourceInfo):
-    resource_type = 'coverageStore'
-    save_method = "PUT"
-
-    def __init__(self, catalog, workspace, name):
-        super(CoverageStore, self).__init__()
-
-        assert isinstance(workspace, ws.Workspace)
-        assert isinstance(name, basestring)
-
-        self.catalog = catalog
-        self.workspace = workspace
-        self.name = name
+    def _get_sld_dom(self):
+        if self._sld_dom is None:
+            self._sld_dom = self.catalog.get_xml(self.body_href)
+        return self._sld_dom
 
     @property
-    def href(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name + ".xml"])
+    def sld_title(self):
+        user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}NamedLayer/{http://www.opengis.net/sld}UserStyle")
+        if not user_style:
+            user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}UserLayer/{http://www.opengis.net/sld}UserStyle")
+        
+        if user_style:
+            try:
+                # it is not mandatory
+                title_node = user_style.find("{http://www.opengis.net/sld}Title")
+            except:
+                title_node = None
 
-    enabled = xml_property("enabled", lambda x: x.text == "true")
-    name = xml_property("name")
-    url = xml_property("url")
-    type = xml_property("type")
+            return title_node.text if title_node is not None else None
 
-    writers = dict(enabled = write_bool("enabled"),
-                   name = write_string("name"),
-                   url = write_string("url"),
-                   type = write_string("type"),
-                   workspace = write_string("workspace"))
-
-    def get_resources(self, name=None):
-        res_url = url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name, "coverages.xml"])
-
-        xml = self.catalog.get_xml(res_url)
-
-        def cov_from_node(node):
-            return coverage_from_index(self.catalog, self.workspace, self, node)
-
-        #if name passed, return only one Coverage, otherwise return all Coverages in store:
-        if name is not None:
-            for node in xml.findall("coverage"):
-                if node.findtext("name") == name:
-                    return cov_from_node(node)
-            return None
-        return [cov_from_node(node) for node in xml.findall("coverage")]
-
-class UnsavedCoverageStore(CoverageStore):
-    save_method = "POST"
-
-    def __init__(self, catalog, name, workspace):
-        super(UnsavedCoverageStore, self).__init__(catalog, workspace, name)
-        self.dirty.update(name = name, enabled = True, type = "GeoTIFF",
-                url = "file:data/", workspace = workspace.name if workspace else None)
+        return None
 
     @property
-    def href(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores"], dict(name=self.name))
-
-class WmsStore(ResourceInfo):
-    resource_type = "wmsStore"
-    save_method = "PUT"
-
-    def __init__(self, catalog, workspace, name, user, password):
-        super(WmsStore, self).__init__()
-
-        assert isinstance(workspace, ws.Workspace)
-        assert isinstance(name, basestring)
-        self.catalog = catalog
-        self.workspace = workspace
-        self.name = name
-        self.metadata = {}
-        self.metadata['user'] = user
-        self.metadata['password'] = password 
+    def sld_name(self):
+        user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}NamedLayer/{http://www.opengis.net/sld}UserStyle")
+        if not user_style:
+            user_style = self._get_sld_dom().find("{http://www.opengis.net/sld}UserLayer/{http://www.opengis.net/sld}UserStyle")
+        
+        if user_style:
+            try:
+                # it is not mandatory
+                name_node = user_style.find("{http://www.opengis.net/sld}Name")
+            except:
+                name_node = None
+            
+        return name_node.text if name_node is not None else None
 
     @property
-    def href(self):
-        return "%s/workspaces/%s/wmsstores/%s.xml" % (self.catalog.service_url, self.workspace.name, self.name)
+    def sld_body(self):
+        content = self.catalog.http.request(self.body_href)[1]
+        return content
 
-    enabled = xml_property("enabled", lambda x: x.text == "true")
-    name = xml_property("name")
-    nativeName = xml_property("nativeName")
-    capabilitiesURL = xml_property("capabilitiesURL")
-    type = xml_property("type")
-    metadata = xml_property("metadata", key_value_pairs)
-
-    writers = dict(enabled = write_bool("enabled"),
-                   name = write_string("name"),
-                   capabilitiesURL = write_string("capabilitiesURL"),
-                   type = write_string("type"),
-                   metadata = write_dict("metadata"))
-
-
-    def get_resources(self, name=None, available=False):
-
-        res_url = "%s/workspaces/%s/wmsstores/%s/wmslayers.xml" % (
-                   self.catalog.service_url,
-                   self.workspace.name,
-                   self.name
-                )
-        layer_name_attr = "wmsLayer"
-
-        if available:
-            res_url += "?list=available"
-            layer_name_attr += 'Name'
-
-        xml = self.catalog.get_xml(res_url)
-        def wl_from_node(node):
-            return wmslayer_from_index(self.catalog, self.workspace, self, node)
-
-        #if name passed, return only one layer, otherwise return all layers in store:
-        if name is not None:
-            for node in xml.findall(layer_name_attr):
-                if node.findtext("name") == name:
-                    return wl_from_node(node)
-            return None
-
-        if available:
-            return [str(node.text) for node in xml.findall(layer_name_attr)]
-        else:
-            return [wl_from_node(node) for node in xml.findall(layer_name_attr)]
-
-class UnsavedWmsStore(WmsStore):
-    save_method = "POST"
-
-    def __init__(self, catalog, name, workspace, user, password):
-        super(UnsavedWmsStore, self).__init__(catalog, workspace, name, user, password)
-        metadata = {}
-        if user is not None and password is not None:
-            metadata['user'] = user
-            metadata['password'] = password
-        self.dirty.update(dict(
-            name=name, enabled=True, capabilitiesURL="", type="WMS", metadata=metadata))
-
-    @property
-    def href(self):
-        return "%s/workspaces/%s/wmsstores?name=%s" % (self.catalog.service_url, self.workspace.name, self.name)
+    def update_body(self, body):
+        headers = { "Content-Type": self.content_type }
+        self.catalog.http.request(
+            self.body_href, "PUT", body, headers)
