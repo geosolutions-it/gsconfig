@@ -12,24 +12,36 @@ from geoserver.support import ResourceInfo, xml_property, write_bool, url
 from geoserver.style import Style
 
 class _attribution(object):
-    def __init__(self, title, width, height):
+    def __init__(self, title, width, height, href, url, type):
         self.title = title
         self.width = width
         self.height = height
+        self.href = href
+        self.url = url
+        self.type = type
 
 def _read_attribution(node):
     title = node.find("title")
     width = node.find("logoWidth")
     height = node.find("logoHeight")
-
+    href = node.find("href")
+    url = node.find("logoURL")
+    type = node.find("logoType")
+    
     if title is not None:
         title = title.text
     if width is not None:
         width = width.text
     if height is not None:
         height = height.text
+    if href is not None:
+        href = href.text
+    if url is not None:
+        url = url.text
+    if type is not None:
+        type = type.text    
 
-    return _attribution(title, width, height)
+    return _attribution(title, width, height, href, url, type)
 
 def _write_attribution(builder, attr):
     builder.start("attribution", dict())
@@ -45,6 +57,18 @@ def _write_attribution(builder, attr):
         builder.start("logoHeight", dict())
         builder.data(attr.height)
         builder.end("logoHeight")
+    if attr.href is not None:
+        builder.start("href", dict())
+        builder.data(attr.href)
+        builder.end("href")
+    if attr.url is not None:
+        builder.start("logoURL", dict())
+        builder.data(attr.url)
+        builder.end("logoURL")
+    if attr.type is not None:
+        builder.start("logoType", dict())
+        builder.data(attr.type)
+        builder.end("logoType")
     builder.end("attribution")
 
 def _write_style_element(builder, name):
@@ -132,19 +156,31 @@ class Layer(ResourceInfo):
     attribution_object = xml_property("attribution", _read_attribution)
     enabled = xml_property("enabled", lambda x: x.text == "true")
     advertised = xml_property("advertised", lambda x: x.text == "true", default=True)
-    
-    def _get_attr_text(self):
-        return self.attribution_object.title
 
-    def _set_attr_text(self, text):
-        self.dirty["attribution"] = _attribution(
-                    text,
-                    self.attribution_object.width,
-                    self.attribution_object.height
-                    )
-        assert self.attribution_object.title == text
+    def _get_attr_attribution(self):
+        return { 'title': self.attribution_object.title, 
+                 'width': self.attribution_object.width, 
+                 'height': self.attribution_object.height, 
+                 'href': self.attribution_object.href, 
+                 'url': self.attribution_object.url, 
+                 'type': self.attribution_object.type }
+     
+    def _set_attr_attribution(self, attribution):
+        self.dirty["attribution"] = _attribution( attribution['title'],
+                                                  attribution['width'],
+                                                  attribution['height'],
+                                                  attribution['href'],
+                                                  attribution['url'],
+                                                  attribution['type'] )
+                    
+        assert self.attribution_object.title == attribution['title']
+        assert self.attribution_object.width == attribution['width']
+        assert self.attribution_object.height == attribution['height']
+        assert self.attribution_object.href == attribution['href']
+        assert self.attribution_object.url == attribution['url']
+        assert self.attribution_object.type == attribution['type']
 
-    attribution = property(_get_attr_text, _set_attr_text)
+    attribution = property(_get_attr_attribution, _set_attr_attribution)
 
     writers = dict(
             attribution = _write_attribution,

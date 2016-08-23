@@ -77,7 +77,7 @@ def xml_property(path, converter = lambda x: x.text, default=None):
     return property(getter, setter, delete)
 
 def bbox(node):
-    if node is not None: 
+    if node is not None:
         minx = node.find("minx")
         maxx = node.find("maxx")
         miny = node.find("miny")
@@ -87,7 +87,7 @@ def bbox(node):
 
         if (None not in [minx, maxx, miny, maxy]):
             return (minx.text, maxx.text, miny.text, maxy.text, crs)
-        else: 
+        else:
             return None
     else:
         return None
@@ -142,6 +142,8 @@ def write_dict(name):
     def write(builder, pairs):
         builder.start(name, dict())
         for k, v in pairs.iteritems():
+            if k == 'port':
+                v = str(v)
             builder.start("entry", dict(key=k))
             builder.data(v)
             builder.end("entry")
@@ -200,7 +202,7 @@ class ResourceInfo(object):
         builder.end(self.resource_type)
         msg = tostring(builder.close())
         return msg
-                
+
 def prepare_upload_bundle(name, data):
     """GeoServer's REST API uses ZIP archives as containers for file formats such
     as Shapefile and WorldImage which include several 'boxcar' files alongside
@@ -301,7 +303,7 @@ def dimension_info(builder, metadata):
                 builder.data(metadata.referenceValue)
                 builder.end("referenceValue")
             builder.end("defaultValue")
-            
+
         builder.end("dimensionInfo")
 
 class DimensionInfo(object):
@@ -332,7 +334,7 @@ class DimensionInfo(object):
         found = [ i[1] for i in self._lookup if i[0] == name ]
         if not found: raise ValueError('invalid multipler: %s' % name)
         return found[0] if found else None
-    
+
     def resolution_millis(self):
         '''if set, get the value of resolution in milliseconds'''
         if self.resolution is None or not isinstance(self.resolution, basestring):
@@ -363,7 +365,7 @@ def md_dimension_info(name, node):
     strategy = defaultValue.find("strategy") if defaultValue is not None else None
     strategy = strategy.text if strategy is not None else None
     return DimensionInfo(
-        name, 
+        name,
         child_text('enabled') == 'true',
         child_text('presentation'),
         int(resolution) if resolution else None,
@@ -379,7 +381,7 @@ def md_dimension_info(name, node):
 def dynamic_default_values_info(builder, metadata):
     if isinstance(metadata, DynamicDefaultValues):
         builder.start("DynamicDefaultValues", dict())
-        
+
         if metadata.configurations is not None:
             builder.start("configurations", dict())
             for c in metadata.configurations:
@@ -399,7 +401,7 @@ def dynamic_default_values_info(builder, metadata):
                 builder.end("configuration")
             builder.end("configurations")
         builder.end("DynamicDefaultValues")
-        
+
 class DynamicDefaultValuesConfiguration(object):
     def __init__(self, dimension, policy, defaultValueExpression):
         self.dimension = dimension
@@ -423,7 +425,7 @@ def md_dynamic_default_values_info(name, node):
             policy = policy.text if policy is not None else None
             defaultValueExpression = n.find("defaultValueExpression")
             defaultValueExpression = defaultValueExpression.text if defaultValueExpression is not None else None
-            
+
             configurations.append(DynamicDefaultValuesConfiguration(dimension, policy, defaultValueExpression))
 
     return DynamicDefaultValues(name, configurations)
@@ -469,7 +471,7 @@ def jdbc_virtual_table(builder, metadata):
             builder.start("keyColumn", dict())
             builder.data(metadata.keyColumn)
             builder.end("keyColumn")
-            
+
         # geometry
         if metadata.geometry is not None:
             g = metadata.geometry
@@ -487,7 +489,7 @@ def jdbc_virtual_table(builder, metadata):
                 builder.data(g.srid)
                 builder.end("srid")
             builder.end("geometry")
-            
+
         # parameters
         if metadata.parameters is not None:
             for p in metadata.parameters:
@@ -505,7 +507,7 @@ def jdbc_virtual_table(builder, metadata):
                     builder.data(p.regexpValidator)
                     builder.end("regexpValidator")
                 builder.end("parameter")
-                
+
         builder.end("virtualTable")
 
 def md_jdbc_virtual_table(key, node):
@@ -526,9 +528,9 @@ def md_jdbc_virtual_table(key, node):
         p_regexpValidator = n_p.find("regexpValidator")
         p_regexpValidator = p_regexpValidator.text if p_regexpValidator is not None else None
         parameters.append(JDBCVirtualTableParam(p_name, p_defaultValue, p_regexpValidator))
-        
+
     return JDBCVirtualTable(name, sql, escapeSql, geometry, keyColumn, parameters)
-    
+
 def md_entry(node):
     """Extract metadata entries from an xml node"""
     key = None
@@ -546,7 +548,7 @@ def md_entry(node):
         value = md_jdbc_virtual_table(key, node.find("virtualTable"))
     else:
         value = node.text
-        
+
     if None in [key, value]:
         return None
     else:

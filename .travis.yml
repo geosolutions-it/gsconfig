@@ -14,7 +14,7 @@ matrix:
     - python: "2.6"
       env: GS_VERSION=2.7.x
     - python: "2.6"
-      env: GS_VERSION=master
+      env: GS_VERSION=2.8.x
     - python: "2.7"
       env: GS_VERSION=2.4.x
     - python: "2.7"
@@ -24,7 +24,7 @@ matrix:
     - python: "2.7"
       env: GS_VERSION=2.7.x
     - python: "2.7"
-      env: GS_VERSION=master
+      env: GS_VERSION=2.8.x
 install:
   - sudo apt-get -qq -y update
   - sudo apt-get install -y --force-yes openjdk-7-jdk --no-install-recommends

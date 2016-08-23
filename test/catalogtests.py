@@ -1,21 +1,24 @@
-import os, subprocess, atexit, signal, tempfile
+import os
+import subprocess
+import atexit
+import signal
+import tempfile
 import time
 import re
 import unittest
 import gisdata
-from geoserver.catalog import Catalog, ConflictingDataError, UploadError, \
-    FailedRequestError
+from geoserver.catalog import Catalog
+from geoserver.catalog import ConflictingDataError
+from geoserver.catalog import UploadError
+from geoserver.catalog import FailedRequestError
 from geoserver.support import ResourceInfo, url
 from geoserver.support import DimensionInfo
-from geoserver.support import JDBCVirtualTable, JDBCVirtualTableGeometry, JDBCVirtualTableParam
+from geoserver.support import JDBCVirtualTable
+from geoserver.support import JDBCVirtualTableGeometry
 from geoserver.layergroup import LayerGroup
 from geoserver.util import shapefile_and_friends
-
-DBPARAMS = dict(host="localhost", port="5432", dbtype="postgis",
-    database=os.getenv("DATABASE", "geonode"),
-    user=os.getenv("DBUSER", "geonode"),
-    passwd=os.getenv("DBPASS", "g30n0d3")
-)
+from utils import DBPARAMS
+from utils import GSPARAMS
 
 try:
     import psycopg2
@@ -27,37 +30,38 @@ except ImportError:
     pass
 
 # support resetting geoserver datadir
-GEOSERVER_HOME = os.getenv('GEOSERVER_HOME')
-if GEOSERVER_HOME:
-    dest = os.getenv('DATA_DIR')
-    data = os.path.join(GEOSERVER_HOME, 'data/release', '')
+if GSPARAMS['GEOSERVER_HOME']:
+    dest = GSPARAMS['DATA_DIR']
+    data = os.path.join(GSPARAMS['GEOSERVER_HOME'], 'data/release', '')
     if dest:
-        os.system('rsync -v -a --delete %s %s' % (data, os.path.join(dest, '')))
+        os.system('rsync -v -a --delete %s %s' %
+                  (data, os.path.join(dest, '')))
     else:
         os.system('git clean -dxf -- %s' % data)
-    os.system('curl -XPOST --user admin:geoserver http://localhost:8080/geoserver/rest/reload')
+    os.system('curl -XPOST --user '+GSPARAMS['GSUSER']+':' +
+              GSPARAMS['GSPASSWORD']+' '+GSPARAMS['GSURL']+'/reload')
 
 # set GS_VERSION to None in order to skip the GeoServer setup
 global child_pid
+child_pid = None
 GS_BASE_DIR = tempfile.gettempdir()
 # use "master" in order to test against the latest GeoServer version
-GS_VERSION = os.getenv('GS_VERSION') if os.getenv('GS_VERSION') else None
-if GS_VERSION:
-    subprocess.Popen(["rm", "-rf", GS_BASE_DIR + "/gs"]).communicate()
-    subprocess.Popen(["mkdir", GS_BASE_DIR + "/gs"]).communicate()
+if GSPARAMS['GS_VERSION']:
+    subprocess.Popen(["rm", "-rf", GSPARAMS['GS_BASE_DIR'] + "/gs"]).communicate()
+    subprocess.Popen(["mkdir", GSPARAMS['GS_BASE_DIR'] + "/gs"]).communicate()
     subprocess.Popen(["wget",
                       "http://repo2.maven.org/maven2/org/mortbay/jetty/jetty-runner/8.1.8.v20121106/jetty-runner-8.1.8.v20121106.jar",
-                      "-P", GS_BASE_DIR + "/gs"]).communicate()
+                      "-P", GSPARAMS['GS_BASE_DIR'] + "/gs"]).communicate()
     subprocess.Popen(["wget",
-                      "http://ares.boundlessgeo.com/geoserver/" + GS_VERSION +"/geoserver-" + GS_VERSION + "-latest-war.zip",
-                      "-P", GS_BASE_DIR + "/gs"]).communicate()
-    subprocess.Popen(["unzip", "-o", "-d", GS_BASE_DIR + "/gs",
-                      GS_BASE_DIR + "/gs/geoserver-" + GS_VERSION + "-latest-war.zip"]).communicate()
+                      "http://ares.boundlessgeo.com/geoserver/" + GSPARAMS['GS_VERSION'] +"/geoserver-" + GSPARAMS['GS_VERSION'] + "-latest-war.zip",
+                      "-P", GSPARAMS['GS_BASE_DIR'] + "/gs"]).communicate()
+    subprocess.Popen(["unzip", "-o", "-d", GSPARAMS['GS_BASE_DIR'] + "/gs",
+                      GSPARAMS['GS_BASE_DIR'] + "/gs/geoserver-" + GSPARAMS['GS_VERSION'] + "-latest-war.zip"]).communicate()
     FNULL = open(os.devnull, 'w')
     proc = subprocess.Popen(["java", "-Xmx512m", "-XX:MaxPermSize=256m",
                              "-Dorg.eclipse.jetty.server.webapp.parentLoaderPriority=true",
-                             "-jar", GS_BASE_DIR + "/gs/jetty-runner-8.1.8.v20121106.jar",
-                             "--path", "/geoserver", GS_BASE_DIR + "/gs/geoserver.war"],
+                             "-jar", GSPARAMS['GS_BASE_DIR'] + "/gs/jetty-runner-8.1.8.v20121106.jar",
+                             "--path", "/geoserver", GSPARAMS['GS_BASE_DIR'] + "/gs/geoserver.war"],
                              stdout=FNULL, stderr=subprocess.STDOUT)
     child_pid = proc.pid
     print "Sleep (90)..."
@@ -67,7 +71,7 @@ def kill_child():
     if child_pid is None:
         pass
     else:
-        subprocess.Popen(["rm", "-Rf", GS_BASE_DIR + "/gs"]).communicate()
+        subprocess.Popen(["rm", "-Rf", GSPARAMS['GS_BASE_DIR'] + "/gs"]).communicate()
         print "KILLING PROCESS: " + str(child_pid)
         os.kill(child_pid, signal.SIGTERM)
 
@@ -108,7 +112,7 @@ class NonCatalogTests(unittest.TestCase):
 
 class CatalogTests(unittest.TestCase):
     def setUp(self):
-        self.cat = Catalog("http://localhost:8080/geoserver/rest")
+        self.cat = Catalog(GSPARAMS['GSURL'], username=GSPARAMS['GSUSER'], password=GSPARAMS['GSPASSWORD'])
 
     def testAbout(self):
         about_html = self.cat.about()
@@ -303,7 +307,7 @@ class CatalogTests(unittest.TestCase):
 class ModifyingTests(unittest.TestCase):
 
     def setUp(self):
-        self.cat = Catalog("http://localhost:8080/geoserver/rest")
+        self.cat = Catalog(GSPARAMS['GSURL'], username=GSPARAMS['GSUSER'], password=GSPARAMS['GSPASSWORD'])
 
     def testFeatureTypeSave(self):
         # test saving round trip
@@ -429,7 +433,7 @@ class ModifyingTests(unittest.TestCase):
         jdbc_vt = JDBCVirtualTable(ft_name, sql, 'false', geom, keyColumn, parameters)
         ft = self.cat.publish_featuretype(ft_name, store, epsg_code, jdbc_virtual_table=jdbc_vt)
 
-    # DISABLED; this test works only in the very particular case 
+    # DISABLED; this test works only in the very particular case
     # "mytiff.tiff" is already present into the GEOSERVER_DATA_DIR
     # def testCoverageStoreCreate(self):
     #     ds = self.cat.create_coveragestore2("coverage_gsconfig")
@@ -505,7 +509,7 @@ class ModifyingTests(unittest.TestCase):
 
     def testWmsStoreCreate(self):
         ws = self.cat.create_wmsstore("wmsstore_gsconfig")
-        ws.capabilitiesURL = "http://suite.opengeo.org/geoserver/ows?service=wms&version=1.1.1&request=GetCapabilities"
+        ws.capabilitiesURL = "http://mesonet.agron.iastate.edu/cgi-bin/wms/iowa/rainfall.cgi?VERSION=1.1.1&REQUEST=GetCapabilities&SERVICE=WMS&"
         ws.type = "WMS"
         self.cat.save(ws)
 
@@ -513,7 +517,7 @@ class ModifyingTests(unittest.TestCase):
         self.cat.create_workspace("wmstest", "http://example.com/wmstest")
         wmstest = self.cat.get_workspace("wmstest")
         wmsstore = self.cat.create_wmsstore("wmsstore", wmstest)
-        wmsstore.capabilitiesURL = "http://suite.opengeo.org/geoserver/ows?service=wms&version=1.1.1&request=GetCapabilities"
+        wmsstore.capabilitiesURL = "http://mesonet.agron.iastate.edu/cgi-bin/wms/iowa/rainfall.cgi?VERSION=1.1.1&REQUEST=GetCapabilities&SERVICE=WMS&"
         wmsstore.type = "WMS"
         self.cat.save(wmsstore)
         wmsstore = self.cat.get_store("wmsstore")
@@ -631,7 +635,12 @@ class ModifyingTests(unittest.TestCase):
         # test saving round trip
         lyr = self.cat.get_layer("states")
         old_attribution = lyr.attribution
-        new_attribution = "Not the original attribution"
+        new_attribution = { 'title': 'Not the original attribution',
+                            'width': '123',
+                            'height': '321',
+                            'href': 'http://www.georchestra.org',
+                            'url': 'https://www.cigalsace.org/portail/cigal/documents/page/mentions-legales/Logo_geOrchestra.jpg',
+                            'type': 'image/jpeg' }
 
         # change attribution on server
         lyr.attribution = new_attribution
