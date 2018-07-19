@@ -160,7 +160,9 @@ class Catalog(object):
         send a delete request
         XXX [more here]
         """
-        rest_url = config_object.href
+        href = urlparse(config_object.href)
+        netloc = urlparse(self.service_url).netloc
+        rest_url = href._replace(netloc=netloc).geturl()
 
         #params aren't supported fully in httplib2 yet, so:
         params = []
@@ -233,7 +235,9 @@ class Catalog(object):
         gets the object's REST location and the data from the object,
         then POSTS the request.
         """
-        rest_url = obj.href
+        href = urlparse(obj.href)
+        netloc = urlparse(self.service_url).netloc
+        rest_url = href._replace(netloc=netloc).geturl()
         message = obj.message()
 
         headers = {
