@@ -36,7 +36,7 @@ Sample Layer Creation Code
 .. code-block:: python
 
     from geoserver.catalog import Catalog
-    cat = Catalog("http://localhost:8080/geoserver/")
+    cat = Catalog("http://localhost:8080/geoserver/rest")
     topp = cat.get_workspace("topp")
     shapefile_plus_sidecars = shapefile_and_friends("states")
     # shapefile_and_friends should look on the filesystem to find a shapefile
@@ -121,6 +121,28 @@ Loading the GeoServer ``catalog`` using ``gsconfig`` is quite easy. The example 
 
     from geoserver.catalog import Catalog
     cat = Catalog("http://localhost:8080/geoserver/rest/", "admin", "geoserver")
+
+
+The code below allows you to filter which workspaces to return
+
+.. code-block:: python
+
+    cat.get_workspaces(names="geosolutions,topp")
+
+You may also specify the workspaces as a proper list
+
+.. code-block:: python
+
+    cat.get_workspaces(names=["geosolutions", "topp"])
+
+The code below allows you to filter which stores to return
+
+.. code-block:: python
+
+    cat.get_stores(names=["sf", "mosaic"], workspaces=["nurc", "topp", "sf"])
+
+``names`` and ``workspaces`` can either be a comma delimited string or a list.
+This is true for the ``get_workspaces``, ``get_stores``, ``get_resources``, ``get_layergroups`` and ``get_styles``.  
 
 The code below allows you to create a FeatureType from a Shapefile
 
@@ -213,14 +235,14 @@ With the following method you can add granules already present on the machine lo
 
 .. code-block:: python
 
-    cat.harvest_externalgranule("file://D:/Work/apache-tomcat-6.0.16/instances/data/data/MetOc/NOAAWW3/20131001/WIND/NOAAWW3_NCOMultiGrid__WIND_000_20131001T000000.tif", store)
+    cat.add_granule("file://D:/Work/apache-tomcat-6.0.16/instances/data/data/MetOc/NOAAWW3/20131001/WIND/NOAAWW3_NCOMultiGrid__WIND_000_20131001T000000.tif", store.name, store.workspace.name)
 
 The method below allows to send granules remotely via POST to the ImageMosaic.
 The granules will be uploaded and stored on the ImageMosaic index folder.
 
 .. code-block:: python
 
-    cat.harvest_uploadgranule("NOAAWW3_NCOMultiGrid__WIND_000_20131002T000000.zip", store)
+    cat.add_granule("NOAAWW3_NCOMultiGrid__WIND_000_20131002T000000.zip", store.name, store.workspace.name)
 
 To delete an ImageMosaic store, you can follow the standard approach, by deleting the layers first.
 *ATTENTION*: at this time you need to manually cleanup the data dir from the mosaic granules and, in case you used a DB datastore, you must also drop the mosaic tables.
@@ -232,15 +254,6 @@ To delete an ImageMosaic store, you can follow the standard approach, by deletin
     cat.reload()
     cat.delete(store)
     cat.reload()
-
-The method below allows you the load and update the coverage metadata of the ImageMosaic.
-You need to do this for every coverage of the ImageMosaic of course.
-
-.. code-block:: python
-
-    coverage = cat.get_resource_by_url("http://localhost:8180/geoserver/rest/workspaces/natocmre/coveragestores/NOAAWW3_NCOMultiGrid_WIND_test/coverages/NOAAWW3_NCOMultiGrid_WIND_test.xml")
-    coverage.supported_formats = ['GEOTIFF']
-    cat.save(coverage)
 
 By default the ImageMosaic layer has not the coverage dimensions configured. It is possible using the coverage metadata to update and manage the coverage dimensions.
 *ATTENTION*: notice that the ``presentation`` parameters accepts only one among the following values {'LIST', 'DISCRETE_INTERVAL', 'CONTINUOUS_INTERVAL'}

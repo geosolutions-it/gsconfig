@@ -7,18 +7,14 @@ The project is distributed under a MIT License .
 '''
 
 __author__ = "David Winslow"
-__copyright__ = "Copyright 2012-2015 Boundless, Copyright 2010-2012 OpenPlans"
+__copyright__ = "Copyright 2012-2018 Boundless, Copyright 2010-2012 OpenPlans"
 __license__ = "MIT"
 
 from geoserver.catalog import Catalog
 
 cat = Catalog("http://localhost:8080/geoserver/rest", "admin", "geoserver")
 
-pg_stores = [s for s in cat.get_stores() 
-    if s.connection_parameters and \
-    s.connection_parameters.get("dbtype") == "postgis"]
+pg_stores = [s.name for s in cat.get_stores()
+    if s.resource_type == 'dataStore' and s.connection_parameters.get("dbtype") == "postgis"]
 
-res = []
-for s in pg_stores:
-    res.extend(r.name for r in cat.get_resources(store=s))
-print res
+print(cat.get_resources(stores=pg_stores))

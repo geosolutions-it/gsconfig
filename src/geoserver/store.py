@@ -5,30 +5,38 @@ The project is distributed under a MIT License .
 '''
 
 __author__ = "David Winslow"
-__copyright__ = "Copyright 2012-2015 Boundless, Copyright 2010-2012 OpenPlans"
+__copyright__ = "Copyright 2012-2018 Boundless, Copyright 2010-2012 OpenPlans"
 __license__ = "MIT"
 
 import geoserver.workspace as ws
-from geoserver.resource import featuretype_from_index, coverage_from_index, \
-        wmslayer_from_index
-from geoserver.support import ResourceInfo, xml_property, key_value_pairs, \
-        write_bool, write_dict, write_string, url
+from geoserver.resource import featuretype_from_index, coverage_from_index, wmslayer_from_index
+from geoserver.support import ResourceInfo, xml_property, key_value_pairs, write_bool, write_dict, write_string, build_url
+
+try:
+    from past.builtins import basestring
+except ImportError:
+    pass
+
 
 def datastore_from_index(catalog, workspace, node):
     name = node.find("name")
     return DataStore(catalog, workspace, name.text)
 
+
 def coveragestore_from_index(catalog, workspace, node):
     name = node.find("name")
     return CoverageStore(catalog, workspace, name.text)
 
+
 def wmsstore_from_index(catalog, workspace, node):
     name = node.find("name")
-    #user = node.find("user")
-    #password = node.find("password")
+    # user = node.find("user")
+    # password = node.find("password")
     return WmsStore(catalog, workspace, name.text, None, None)
 
+
 class DataStore(ResourceInfo):
+
     resource_type = "dataStore"
     save_method = "PUT"
 
@@ -43,33 +51,53 @@ class DataStore(ResourceInfo):
 
     @property
     def href(self):
-        return url(self.catalog.service_url, 
-            ["workspaces", self.workspace.name, "datastores", self.name + ".xml"])
+        url = build_url(
+            self.catalog.service_url,
+            [
+                "workspaces",
+                self.workspace.name,
+                "datastores",
+                self.name + ".xml"
+            ]
+        )
+        return url
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
     type = xml_property("type")
     connection_parameters = xml_property("connectionParameters", key_value_pairs)
 
-    writers = dict(enabled = write_bool("enabled"),
-                   name = write_string("name"),
-                   type = write_string("type"),
-                   connectionParameters = write_dict("connectionParameters"))
+    writers = dict(
+        enabled = write_bool("enabled"),
+        name = write_string("name"),
+        type = write_string("type"),
+        connectionParameters = write_dict("connectionParameters")
+    )
 
     @property
     def resource_url(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "datastores", self.name, "featuretypes.xml"])
+        url = build_url(
+            self.catalog.service_url,
+            [
+                "workspaces",
+                self.workspace.name,
+                "datastores",
+                self.name,
+                "featuretypes.xml"
+            ]
+        )
+        return url
 
     def get_resources(self, name=None, available=False):
         res_url = self.resource_url
         if available:
             res_url += "?list=available"
         xml = self.catalog.get_xml(res_url)
+
         def ft_from_node(node):
             return featuretype_from_index(self.catalog, self.workspace, self, node)
 
-        #if name passed, return only one FeatureType, otherwise return all FeatureTypes in store:
+        # if name passed, return only one FeatureType, otherwise return all FeatureTypes in store:
         if name is not None:
             for node in xml.findall("featureType"):
                 if node.findtext("name") == name:
@@ -82,20 +110,25 @@ class DataStore(ResourceInfo):
 
 
 class UnsavedDataStore(DataStore):
+
     save_method = "POST"
 
     def __init__(self, catalog, name, workspace):
         super(UnsavedDataStore, self).__init__(catalog, workspace, name)
         self.dirty.update(dict(
-            name=name, enabled=True,  type=None,
+            name=name, enabled=True, type=None,
             connectionParameters=dict()))
 
     @property
     def href(self):
-        path = [ "workspaces",
-                 self.workspace.name, "datastores"]
+        path = [
+            "workspaces",
+            self.workspace.name,
+            "datastores"
+        ]
         query = dict(name=self.name)
-        return url(self.catalog.service_url, path, query)
+        return build_url(self.catalog.service_url, path, query)
+
 
 class CoverageStore(ResourceInfo):
     resource_type = 'coverageStore'
@@ -104,39 +137,54 @@ class CoverageStore(ResourceInfo):
     def __init__(self, catalog, workspace, name):
         super(CoverageStore, self).__init__()
 
-        assert isinstance(workspace, ws.Workspace)
-        assert isinstance(name, basestring)
-
         self.catalog = catalog
         self.workspace = workspace
         self.name = name
 
     @property
     def href(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name + ".xml"])
+        url = build_url(
+            self.catalog.service_url,
+            [
+                "workspaces",
+                self.workspace.name,
+                "coveragestores",
+                "{}.xml".format(self.name)
+            ]
+        )
+        return url
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
     url = xml_property("url")
     type = xml_property("type")
 
-    writers = dict(enabled = write_bool("enabled"),
-                   name = write_string("name"),
-                   url = write_string("url"),
-                   type = write_string("type"),
-                   workspace = write_string("workspace"))
+    writers = dict(
+        enabled = write_bool("enabled"),
+        name = write_string("name"),
+        url = write_string("url"),
+        type = write_string("type"),
+        workspace = write_string("workspace")
+    )
 
     def get_resources(self, name=None):
-        res_url = url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name, "coverages.xml"])
+        res_url = build_url(
+            self.catalog.service_url,
+            [
+                "workspaces",
+                self.workspace.name,
+                "coveragestores",
+                self.name,
+                "coverages.xml"
+            ]
+        )
 
         xml = self.catalog.get_xml(res_url)
 
         def cov_from_node(node):
             return coverage_from_index(self.catalog, self.workspace, self, node)
 
-        #if name passed, return only one Coverage, otherwise return all Coverages in store:
+        # if name passed, return only one Coverage, otherwise return all Coverages in store:
         if name is not None:
             for node in xml.findall("coverage"):
                 if node.findtext("name") == name:
@@ -144,18 +192,33 @@ class CoverageStore(ResourceInfo):
             return None
         return [cov_from_node(node) for node in xml.findall("coverage")]
 
+
 class UnsavedCoverageStore(CoverageStore):
     save_method = "POST"
 
     def __init__(self, catalog, name, workspace):
         super(UnsavedCoverageStore, self).__init__(catalog, workspace, name)
-        self.dirty.update(name = name, enabled = True, type = "GeoTIFF",
-                url = "file:data/", workspace = workspace.name if workspace else None)
+        self.dirty.update(
+            name = name,
+            enabled = True,
+            type = 'GeoTIFF',
+            url = "file:data/",
+            workspace = workspace
+        )
 
     @property
     def href(self):
-        return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores"], dict(name=self.name))
+        url = build_url(
+            self.catalog.service_url,
+            [
+                "workspaces",
+                self.workspace,
+                "coveragestores"
+            ],
+            dict(name=self.name)
+        )
+        return url
+
 
 class WmsStore(ResourceInfo):
     resource_type = "wmsStore"
@@ -163,15 +226,12 @@ class WmsStore(ResourceInfo):
 
     def __init__(self, catalog, workspace, name, user, password):
         super(WmsStore, self).__init__()
-
-        assert isinstance(workspace, ws.Workspace)
-        assert isinstance(name, basestring)
         self.catalog = catalog
         self.workspace = workspace
         self.name = name
         self.metadata = {}
         self.metadata['user'] = user
-        self.metadata['password'] = password 
+        self.metadata['password'] = password
 
     @property
     def href(self):
@@ -190,14 +250,12 @@ class WmsStore(ResourceInfo):
                    type = write_string("type"),
                    metadata = write_dict("metadata"))
 
-
     def get_resources(self, name=None, available=False):
-
-        res_url = "%s/workspaces/%s/wmsstores/%s/wmslayers.xml" % (
-                   self.catalog.service_url,
-                   self.workspace.name,
-                   self.name
-                )
+        res_url = "{}/workspaces/{}/wmsstores/{}/wmslayers.xml".format(
+            self.catalog.service_url,
+            self.workspace.name,
+            self.name
+        )
         layer_name_attr = "wmsLayer"
 
         if available:
@@ -205,10 +263,11 @@ class WmsStore(ResourceInfo):
             layer_name_attr += 'Name'
 
         xml = self.catalog.get_xml(res_url)
+
         def wl_from_node(node):
             return wmslayer_from_index(self.catalog, self.workspace, self, node)
 
-        #if name passed, return only one layer, otherwise return all layers in store:
+        # if name passed, return only one layer, otherwise return all layers in store:
         if name is not None:
             for node in xml.findall(layer_name_attr):
                 if node.findtext("name") == name:
@@ -219,6 +278,7 @@ class WmsStore(ResourceInfo):
             return [str(node.text) for node in xml.findall(layer_name_attr)]
         else:
             return [wl_from_node(node) for node in xml.findall(layer_name_attr)]
+
 
 class UnsavedWmsStore(WmsStore):
     save_method = "POST"

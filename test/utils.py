@@ -1,5 +1,6 @@
 """utils to centralize global variabl settings configurable by env vars."""
 import os
+import tempfile
 
 # envs that can be override by os.environ envs
 GSHOSTNAME = 'localhost'
@@ -7,6 +8,7 @@ GSPORT = '8080'
 GSSSHPORT = '8443'
 GSUSER = 'admin'
 GSPASSWORD = 'geoserver'
+GS_BASE_DIR = tempfile.gettempdir()
 
 
 def geoserverLocation():
@@ -28,22 +30,22 @@ def geoserverLocationSsh():
 
 def serverLocationBasicAuth():
     """Set server URL for http connection."""
-    return "http://"+geoserverLocation()+"/geoserver"
+    return "http://" + geoserverLocation() + "/geoserver"
 
 
 def serverLocationPkiAuth():
     """Set server URL for https connection."""
-    return "https://"+geoserverLocationSsh()+"/geoserver"
+    return "https://" + geoserverLocationSsh() + "/geoserver"
 
 
 GSPARAMS = dict(
-    GSURL=serverLocationBasicAuth()+'/rest',
+    GSURL=serverLocationBasicAuth() + '/rest',
     GSUSER=GSUSER,
     GSPASSWORD=GSPASSWORD,
     GEOSERVER_HOME='',
     DATA_DIR='',
     GS_VERSION='',
-    GS_BASE_DIR=''
+    GS_BASE_DIR=GS_BASE_DIR
 )
 GSPARAMS.update([(k, os.getenv(k)) for k in GSPARAMS if k in os.environ])
 
@@ -55,8 +57,7 @@ DBPARAMS = dict(
     user=os.getenv("DBUSER", "postgres"),
     passwd=os.getenv("DBPASS", "password")
 )
-print '*** GSPARAMS ***'
-print GSPARAMS
-print '*** DBPARAMS ***'
-print DBPARAMS
-print '****************'
+print('*** GSPARAMS ***')
+print(GSPARAMS)
+print('*** DBPARAMS ***')
+print(DBPARAMS)

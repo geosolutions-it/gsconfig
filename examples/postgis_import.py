@@ -7,7 +7,7 @@ The project is distributed under a MIT License .
 '''
 
 __author__ = "David Winslow"
-__copyright__ = "Copyright 2012-2015 Boundless, Copyright 2010-2012 OpenPlans"
+__copyright__ = "Copyright 2012-2018 Boundless, Copyright 2010-2012 OpenPlans"
 __license__ = "MIT"
 
 from geoserver.catalog import Catalog
@@ -25,6 +25,5 @@ ds.connection_parameters.update(
 
 cat.save(ds)
 ds = cat.get_store(name)
-components = \
-  dict((ext, "myfile." + ext) for ext in ["shp", "prj", "shx", "dbf"])
+components = dict((ext, "myfile." + ext) for ext in ["shp", "prj", "shx", "dbf"])
 cat.add_data_to_store(ds, "mylayer", components)
